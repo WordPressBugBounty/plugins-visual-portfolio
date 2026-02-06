@@ -2,14 +2,14 @@
 # This file is distributed under the GPLv2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Visual Portfolio, Posts & Image Gallery 3.3.16\n"
+"Project-Id-Version: Visual Portfolio, Posts & Image Gallery 3.4.1\n"
 "Report-Msgid-Bugs-To: https://github.com/nk-crew/visual-portfolio/issues\n"
 "Last-Translator: Visual Portfolio\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2025-06-26T08:41:05+00:00\n"
+"POT-Creation-Date: 2025-11-10T20:02:21+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.10.0\n"
 "X-Domain: visual-portfolio\n"
@@ -17,6 +17,12 @@ msgstr ""
 #. Plugin Name of the plugin
 #: class-visual-portfolio.php
 msgid "Visual Portfolio, Posts & Image Gallery"
+msgstr ""
+
+#. Plugin URI of the plugin
+#. Author URI of the plugin
+#: class-visual-portfolio.php
+msgid "https://www.visualportfolio.com/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=byline"
 msgstr ""
 
 #. Description of the plugin
@@ -29,12 +35,7 @@ msgstr ""
 msgid "Visual Portfolio Team"
 msgstr ""
 
-#. Author URI of the plugin
-#: class-visual-portfolio.php
-msgid "https://www.visualportfolio.com/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=byline"
-msgstr ""
-
-#: class-visual-portfolio.php:123
+#: class-visual-portfolio.php:124
 #: classes/class-welcome-screen.php:106
 #: classes/class-welcome-screen.php:109
 msgid "Visual Portfolio"
@@ -76,7 +77,7 @@ msgstr ""
 
 #: classes/class-admin.php:237
 #: classes/class-admin.php:286
-#: classes/class-custom-post-type.php:856
+#: classes/class-custom-post-type.php:859
 #: classes/class-settings.php:764
 #: classes/class-settings.php:779
 #: classes/class-settings.php:794
@@ -353,18 +354,18 @@ msgid "Custom CSS"
 msgstr ""
 
 #: classes/class-admin.php:1315
-#: classes/class-custom-post-type.php:570
+#: classes/class-custom-post-type.php:573
 msgid "Posts"
 msgstr ""
 
 #: classes/class-admin.php:1321
-#: classes/class-custom-post-type.php:571
+#: classes/class-custom-post-type.php:574
 #: classes/class-settings.php:202
 msgid "Images"
 msgstr ""
 
 #: classes/class-admin.php:1327
-#: classes/class-custom-post-type.php:572
+#: classes/class-custom-post-type.php:575
 msgid "Social"
 msgstr ""
 
@@ -497,7 +498,7 @@ msgstr ""
 #: classes/class-admin.php:2879
 #: classes/class-admin.php:3215
 #: classes/class-admin.php:3557
-#: classes/class-custom-post-type.php:851
+#: classes/class-custom-post-type.php:854
 #: classes/class-settings.php:761
 #: classes/class-settings.php:776
 #: classes/class-settings.php:791
@@ -535,7 +536,7 @@ msgid "Description"
 msgstr ""
 
 #: classes/class-admin.php:1662
-#: classes/class-custom-post-type.php:190
+#: classes/class-custom-post-type.php:191
 msgid "Categories"
 msgstr ""
 
@@ -996,7 +997,7 @@ msgid "Dropdown"
 msgstr ""
 
 #: classes/class-admin.php:3082
-#: gutenberg/blocks/filter-by-category/edit.js:242
+#: gutenberg/blocks/filter-by-category/edit.js:239
 msgid "Display Count"
 msgstr ""
 
@@ -1006,9 +1007,9 @@ msgstr ""
 
 #: classes/class-admin.php:3093
 #: classes/class-get-portfolio.php:1069
-#: classes/class-rest.php:299
+#: classes/class-rest.php:307
 #: classes/class-shortcode.php:58
-#: gutenberg/blocks/filter-by-category/edit.js:159
+#: gutenberg/blocks/filter-by-category/edit.js:153
 #: gutenberg/components/gallery-control/index.js:924
 msgid "All"
 msgstr ""
@@ -1111,13 +1112,13 @@ msgstr ""
 
 #. translators: %s - taxonomy name.
 #: classes/class-archive-mapping.php:430
-#: classes/class-archive-mapping.php:1464
+#: classes/class-archive-mapping.php:1490
 msgid "Portfolio Category: %s"
 msgstr ""
 
 #. translators: %s - taxonomy name.
 #: classes/class-archive-mapping.php:436
-#: classes/class-archive-mapping.php:1468
+#: classes/class-archive-mapping.php:1494
 msgid "Portfolio Tag: %s"
 msgstr ""
 
@@ -1152,7 +1153,7 @@ msgstr ""
 
 #: classes/class-archive-mapping.php:646
 #: classes/class-archive-mapping.php:750
-#: classes/class-archive-mapping.php:1202
+#: classes/class-archive-mapping.php:1228
 msgctxt "default-slug"
 msgid "portfolio"
 msgstr ""
@@ -1173,15 +1174,15 @@ msgstr ""
 msgid "Enter a custom base to use. A base must be set or WordPress will use default instead."
 msgstr ""
 
-#: classes/class-archive-mapping.php:1112
+#: classes/class-archive-mapping.php:1138
 msgid "Portfolio"
 msgstr ""
 
-#: classes/class-archive-mapping.php:1188
+#: classes/class-archive-mapping.php:1214
 msgid "Portfolio Page"
 msgstr ""
 
-#: classes/class-archive-mapping.php:1222
+#: classes/class-archive-mapping.php:1248
 msgctxt "default-label"
 msgid "Portfolio"
 msgstr ""
@@ -1218,97 +1219,97 @@ msgid "I already did"
 msgstr ""
 
 #. translators: %s - plugin name.
-#: classes/class-assets.php:704
+#: classes/class-assets.php:737
 msgid "Couldn't retrieve %s ID."
 msgstr ""
 
-#: classes/class-assets.php:706
+#: classes/class-assets.php:739
 msgid "Close (Esc)"
 msgstr ""
 
-#: classes/class-assets.php:707
-#: classes/class-assets.php:727
+#: classes/class-assets.php:740
+#: classes/class-assets.php:760
 msgid "Share"
 msgstr ""
 
-#: classes/class-assets.php:708
+#: classes/class-assets.php:741
 msgid "Toggle fullscreen"
 msgstr ""
 
-#: classes/class-assets.php:709
+#: classes/class-assets.php:742
 msgid "Zoom in/out"
 msgstr ""
 
-#: classes/class-assets.php:710
+#: classes/class-assets.php:743
 msgid "Previous (arrow left)"
 msgstr ""
 
-#: classes/class-assets.php:711
+#: classes/class-assets.php:744
 msgid "Next (arrow right)"
 msgstr ""
 
-#: classes/class-assets.php:712
+#: classes/class-assets.php:745
 msgid "Share on Facebook"
 msgstr ""
 
-#: classes/class-assets.php:713
+#: classes/class-assets.php:746
 msgid "Tweet"
 msgstr ""
 
-#: classes/class-assets.php:714
+#: classes/class-assets.php:747
 msgid "X"
 msgstr ""
 
-#: classes/class-assets.php:715
+#: classes/class-assets.php:748
 msgid "Pin it"
 msgstr ""
 
-#: classes/class-assets.php:716
-#: classes/class-assets.php:726
+#: classes/class-assets.php:749
+#: classes/class-assets.php:759
 msgid "Download"
 msgstr ""
 
-#: classes/class-assets.php:718
+#: classes/class-assets.php:751
 msgid "Close"
 msgstr ""
 
-#: classes/class-assets.php:719
+#: classes/class-assets.php:752
 #: gutenberg/blocks/pagination-next/index.php:61
 #: gutenberg/blocks/pagination-next/edit.js:48
 msgid "Next"
 msgstr ""
 
-#: classes/class-assets.php:720
+#: classes/class-assets.php:753
 #: gutenberg/blocks/pagination-previous/index.php:66
 #: gutenberg/blocks/pagination-previous/edit.js:61
 msgid "Previous"
 msgstr ""
 
-#: classes/class-assets.php:721
+#: classes/class-assets.php:754
 msgid "The requested content cannot be loaded. <br /> Please try again later."
 msgstr ""
 
-#: classes/class-assets.php:722
+#: classes/class-assets.php:755
 msgid "Start slideshow"
 msgstr ""
 
-#: classes/class-assets.php:723
+#: classes/class-assets.php:756
 msgid "Pause slideshow"
 msgstr ""
 
-#: classes/class-assets.php:724
+#: classes/class-assets.php:757
 msgid "Full screen"
 msgstr ""
 
-#: classes/class-assets.php:725
+#: classes/class-assets.php:758
 msgid "Thumbnails"
 msgstr ""
 
-#: classes/class-assets.php:728
+#: classes/class-assets.php:761
 msgid "Zoom"
 msgstr ""
 
-#: classes/class-controls.php:171
+#: classes/class-controls.php:174
 msgid "Dynamic control callback function is not found."
 msgstr ""
 
@@ -1326,7 +1327,7 @@ msgid "Project"
 msgstr ""
 
 #: classes/class-custom-post-type.php:138
-#: classes/class-custom-post-type.php:234
+#: classes/class-custom-post-type.php:237
 msgid "Parent Project"
 msgstr ""
 
@@ -1343,7 +1344,7 @@ msgid "Add New Project"
 msgstr ""
 
 #: classes/class-custom-post-type.php:142
-#: classes/class-custom-post-type.php:238
+#: classes/class-custom-post-type.php:241
 msgid "Add New"
 msgstr ""
 
@@ -1360,129 +1361,129 @@ msgid "Search Project"
 msgstr ""
 
 #: classes/class-custom-post-type.php:146
-#: classes/class-custom-post-type.php:242
+#: classes/class-custom-post-type.php:245
 msgid "Not Found"
 msgstr ""
 
 #: classes/class-custom-post-type.php:147
-#: classes/class-custom-post-type.php:243
+#: classes/class-custom-post-type.php:246
 msgid "Not found in Trash"
 msgstr ""
 
-#: classes/class-custom-post-type.php:188
+#: classes/class-custom-post-type.php:189
 msgid "Portfolio Categories"
 msgstr ""
 
-#: classes/class-custom-post-type.php:208
+#: classes/class-custom-post-type.php:210
 msgid "Portfolio Tags"
 msgstr ""
 
-#: classes/class-custom-post-type.php:210
+#: classes/class-custom-post-type.php:212
 msgid "Tags"
 msgstr ""
 
-#: classes/class-custom-post-type.php:231
+#: classes/class-custom-post-type.php:234
 msgctxt "Post Type General Name"
 msgid "Saved Layouts"
 msgstr ""
 
-#: classes/class-custom-post-type.php:232
+#: classes/class-custom-post-type.php:235
 msgctxt "Post Type Singular Name"
 msgid "Saved Layout"
 msgstr ""
 
-#: classes/class-custom-post-type.php:235
+#: classes/class-custom-post-type.php:238
 msgid "Saved Layouts"
 msgstr ""
 
-#: classes/class-custom-post-type.php:236
+#: classes/class-custom-post-type.php:239
 msgid "View Saved Layout"
 msgstr ""
 
-#: classes/class-custom-post-type.php:237
+#: classes/class-custom-post-type.php:240
 msgid "Add New Saved Layout"
 msgstr ""
 
-#: classes/class-custom-post-type.php:239
+#: classes/class-custom-post-type.php:242
 msgid "Edit Saved Layout"
 msgstr ""
 
-#: classes/class-custom-post-type.php:240
+#: classes/class-custom-post-type.php:243
 msgid "Update Saved Layout"
 msgstr ""
 
-#: classes/class-custom-post-type.php:241
+#: classes/class-custom-post-type.php:244
 msgid "Search Saved Layout"
 msgstr ""
 
 #. translators: %s - taxonomy name.
-#: classes/class-custom-post-type.php:296
+#: classes/class-custom-post-type.php:299
 msgid "Show All %s"
 msgstr ""
 
-#: classes/class-custom-post-type.php:337
+#: classes/class-custom-post-type.php:340
 msgid "Portfolio Manager"
 msgstr ""
 
-#: classes/class-custom-post-type.php:342
+#: classes/class-custom-post-type.php:345
 msgid "Portfolio Author"
 msgstr ""
 
-#: classes/class-custom-post-type.php:427
+#: classes/class-custom-post-type.php:430
 msgid "Thumbnail"
 msgstr ""
 
-#: classes/class-custom-post-type.php:469
+#: classes/class-custom-post-type.php:472
 msgid "When to use Saved Layouts"
 msgstr ""
 
 #. translators: %2$s - plugin name.
-#: classes/class-custom-post-type.php:477
+#: classes/class-custom-post-type.php:480
 msgid "If you are using the Gutenberg page builder for your pages and posts, you should <strong>avoid using Saved Layouts</strong>. See here more info about <a href=\"%1$s\" target=\"_blank\">%2$s Blocks</a>."
 msgstr ""
 
 #. translators: %s - url to documentation.
-#: classes/class-custom-post-type.php:487
+#: classes/class-custom-post-type.php:490
 msgid "To reuse blocks, you can use the built-in Gutenberg feature - <a href=\"%s\" target=\"_blank\">Reusable Blocks</a>."
 msgstr ""
 
 #. translators: %s - url to documentation.
-#: classes/class-custom-post-type.php:493
+#: classes/class-custom-post-type.php:496
 msgid "Saved Layouts may be only used for 3rd-party builders (such as Elementor, WPBakery Page Builder, etc.), <a href=\"%s\" target=\"_blank\">read more info in documentation</a>. Since WordPress moved from Shortcodes to Blocks system, we prepared for you advanced blocks."
 msgstr ""
 
-#: classes/class-custom-post-type.php:511
+#: classes/class-custom-post-type.php:514
 msgid "Icon"
 msgstr ""
 
-#: classes/class-custom-post-type.php:519
+#: classes/class-custom-post-type.php:522
 msgid "Shortcode"
 msgstr ""
 
-#: classes/class-custom-post-type.php:584
+#: classes/class-custom-post-type.php:587
 msgid "All layouts"
 msgstr ""
 
-#: classes/class-custom-post-type.php:594
+#: classes/class-custom-post-type.php:597
 msgid "All styles"
 msgstr ""
 
-#: classes/class-custom-post-type.php:604
+#: classes/class-custom-post-type.php:607
 msgid "All sources"
 msgstr ""
 
-#: classes/class-custom-post-type.php:797
-#: classes/class-custom-post-type.php:798
+#: classes/class-custom-post-type.php:800
+#: classes/class-custom-post-type.php:801
 #: classes/class-welcome-screen.php:177
 msgid "Documentation"
 msgstr ""
 
-#: classes/class-custom-post-type.php:818
-#: classes/class-custom-post-type.php:819
+#: classes/class-custom-post-type.php:821
+#: classes/class-custom-post-type.php:822
 msgid "Proofing"
 msgstr ""
 
-#: classes/class-custom-post-type.php:854
+#: classes/class-custom-post-type.php:857
 msgid "Send a collection of photographs to your client for approval."
 msgstr ""
 
@@ -1502,34 +1503,34 @@ msgstr ""
 msgid "Caption Align"
 msgstr ""
 
-#: classes/class-get-portfolio.php:2091
+#: classes/class-get-portfolio.php:2104
 #: gutenberg/blocks/sort/index.php:58
 #: gutenberg/blocks/sort/edit.js:13
 msgid "Default sorting"
 msgstr ""
 
-#: classes/class-get-portfolio.php:2092
+#: classes/class-get-portfolio.php:2105
 #: gutenberg/blocks/sort/index.php:59
 msgid "Sort by date (newest)"
 msgstr ""
 
-#: classes/class-get-portfolio.php:2093
+#: classes/class-get-portfolio.php:2106
 #: gutenberg/blocks/sort/index.php:60
 msgid "Sort by date (oldest)"
 msgstr ""
 
-#: classes/class-get-portfolio.php:2094
+#: classes/class-get-portfolio.php:2107
 #: gutenberg/blocks/sort/index.php:61
 msgid "Sort by title (A-Z)"
 msgstr ""
 
-#: classes/class-get-portfolio.php:2095
+#: classes/class-get-portfolio.php:2108
 #: gutenberg/blocks/sort/index.php:62
 msgid "Sort by title (Z-A)"
 msgstr ""
 
 #. translators: %s - published in human format.
-#: classes/class-get-portfolio.php:2221
+#: classes/class-get-portfolio.php:2234
 msgid "%s ago"
 msgstr ""
 
@@ -1549,32 +1550,37 @@ msgstr ""
 msgid "Extra Large (VP)"
 msgstr ""
 
-#: classes/class-rest.php:230
+#: classes/class-rest.php:221
 msgid "Required parameters are missing."
 msgstr ""
 
-#: classes/class-rest.php:345
+#. translators: %s: Invalid content source type
+#: classes/class-rest.php:259
+msgid "Invalid content source: %s"
+msgstr ""
+
+#: classes/class-rest.php:353
 msgid "Sorry, you are not allowed to get filter items."
 msgstr ""
 
-#: classes/class-rest.php:364
+#: classes/class-rest.php:372
 msgid "Sorry, you are not allowed to get list of saved layouts."
 msgstr ""
 
-#: classes/class-rest.php:396
+#: classes/class-rest.php:404
 msgid "Layouts not found."
 msgstr ""
 
-#: classes/class-rest.php:411
+#: classes/class-rest.php:419
 msgid "Post ID is required for this request."
 msgstr ""
 
-#: classes/class-rest.php:415
+#: classes/class-rest.php:423
 msgid "Sorry, you are not allowed to edit saved layouts data."
 msgstr ""
 
-#: classes/class-rest.php:471
-#: classes/class-rest.php:475
+#: classes/class-rest.php:479
+#: classes/class-rest.php:483
 msgid "User don't have permissions to change options."
 msgstr ""
 
@@ -2380,15 +2386,15 @@ msgstr ""
 msgid "Less"
 msgstr ""
 
-#: gutenberg/components/select-control/index.js:331
+#: gutenberg/components/select-control/index.js:335
 msgid "Type to search…"
 msgstr ""
 
-#: gutenberg/components/select-control/index.js:332
+#: gutenberg/components/select-control/index.js:336
 msgid "Select…"
 msgstr ""
 
-#: gutenberg/components/select-control/index.js:360
+#: gutenberg/components/select-control/index.js:364
 msgid "Type and press Enter…"
 msgstr ""
 
