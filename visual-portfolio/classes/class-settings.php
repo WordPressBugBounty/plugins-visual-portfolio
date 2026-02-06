@@ -178,6 +178,8 @@ class Visual_Portfolio_Settings {
 				'nonce' => wp_create_nonce( 'vp-ajax-nonce' ),
 			);
 
+			self::$settings_api->admin_enqueue_scripts();
+
 			Visual_Portfolio_Assets::enqueue_script( 'visual-portfolio-archive-page-selector', 'build/assets/admin/js/archive-page-selector', array( 'select2' ) );
 
 			wp_localize_script( 'visual-portfolio-archive-page-selector', 'VPAdminVariables', $data_init );
@@ -811,8 +813,6 @@ class Visual_Portfolio_Settings {
 	 * @return void
 	 */
 	public static function print_settings_page() {
-		self::$settings_api->admin_enqueue_scripts();
-
 		echo '<div class="wrap">';
 		echo '<h2>' . esc_html__( 'Settings', 'visual-portfolio' ) . '</h2>';
 
@@ -861,8 +861,11 @@ class Visual_Portfolio_Settings {
 			'' => esc_html__( '-- Select Page --', 'visual-portfolio' ),
 		);
 		if ( $archive_page ) {
-			$archive_title               = get_post_field( 'post_title', $archive_page );
-			$pages_list[ $archive_page ] = $archive_title;
+			$post = get_post( $archive_page );
+
+			if ( $post instanceof WP_Post ) {
+				$pages_list[ $archive_page ] = $post->post_title;
+			}
 		}
 		return $pages_list;
 	}
