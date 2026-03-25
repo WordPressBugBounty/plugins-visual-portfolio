@@ -208,6 +208,7 @@ class Visual_Portfolio_Gutenberg {
 				'plugin_version'           => VISUAL_PORTFOLIO_VERSION,
 				'plugin_name'              => visual_portfolio()->plugin_name,
 				'plugin_url'               => visual_portfolio()->plugin_url,
+				'pro'                      => visual_portfolio()->is_pro(),
 				'admin_url'                => get_admin_url(),
 				'attributes'               => $attributes,
 				'controls'                 => Visual_Portfolio_Controls::get_registered_array(),
@@ -222,6 +223,12 @@ class Visual_Portfolio_Gutenberg {
 			'visual-portfolio-gutenberg-custom-post-meta',
 			'build/gutenberg/custom-post-meta'
 		);
+		Visual_Portfolio_Assets::enqueue_style(
+			'visual-portfolio-gutenberg-custom-post-meta',
+			'build/gutenberg/custom-post-meta'
+		);
+		wp_style_add_data( 'visual-portfolio-gutenberg-custom-post-meta', 'rtl', 'replace' );
+		wp_style_add_data( 'visual-portfolio-gutenberg-custom-post-meta', 'suffix', '.min' );
 
 		wp_localize_script(
 			'visual-portfolio-gutenberg-custom-post-meta',
