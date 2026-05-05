@@ -21,17 +21,19 @@ import { isEqual } from 'lodash';
 
 import { MediaUpload, MediaUploadCheck } from '@wordpress/block-editor';
 import {
-	__experimentalToggleGroupControl,
-	__experimentalToggleGroupControlOption,
 	Button,
 	CheckboxControl,
 	Modal,
 	SelectControl,
-	ToggleGroupControl as __stableToggleGroupControl,
-	ToggleGroupControlOption as __stableToggleGroupControlOption,
 } from '@wordpress/components';
 import { useSelect } from '@wordpress/data';
-import { useEffect, useRef, useState } from '@wordpress/element';
+import {
+	cloneElement,
+	isValidElement,
+	useEffect,
+	useRef,
+	useState,
+} from '@wordpress/element';
 import { applyFilters } from '@wordpress/hooks';
 import { __, sprintf } from '@wordpress/i18n';
 
@@ -41,6 +43,7 @@ import FocalPointControl, {
 	normalizeFocalPointValue,
 } from '../focal-point-control';
 import MediaPreviewCard from '../media-preview-card';
+import { ToggleGroupButtonsControl } from '../toggle-group-control';
 import CollapsibleSection from './collapsible-section';
 import getAllCategories from './utils/get-all-categories';
 
@@ -49,10 +52,6 @@ const { VPGutenbergVariables } = window;
 const UNCATEGORIZED_VALUE = '------';
 const ITEMS_COUNT_DEFAULT = 18;
 const IS_PRO_PLUGIN = !! VPGutenbergVariables?.pro;
-const ToggleGroupControl =
-	__stableToggleGroupControl || __experimentalToggleGroupControl;
-const ToggleGroupControlOption =
-	__stableToggleGroupControlOption || __experimentalToggleGroupControlOption;
 
 function getAllowedMediaTypes( isPro = false ) {
 	return isPro ? [ 'image', 'video' ] : [ 'image' ];
@@ -242,7 +241,7 @@ function getBulkImagesDefaultValue( allItems, selectedItems, optionName ) {
 function GalleryStateTabs( { activeMediaState, setActiveMediaState, isPro } ) {
 	return (
 		<div className="vpf-component-gallery-control-item-modal-state-tabs">
-			<ToggleGroupControl
+			<ToggleGroupButtonsControl
 				label={ __( 'Media', 'visual-portfolio' ) }
 				value={ activeMediaState }
 				onChange={ ( value ) => {
@@ -250,20 +249,18 @@ function GalleryStateTabs( { activeMediaState, setActiveMediaState, isPro } ) {
 						setActiveMediaState( value );
 					}
 				} }
-				isBlock
-				__next40pxDefaultSize
-				__nextHasNoMarginBottom
-			>
-				<ToggleGroupControlOption
-					value="normal"
-					label={ __( 'Normal', 'visual-portfolio' ) }
-				/>
-				<ToggleGroupControlOption
-					value="hover"
-					label={ __( 'Hover', 'visual-portfolio' ) }
-					disabled={ ! isPro }
-				/>
-			</ToggleGroupControl>
+				options={ [
+					{
+						value: 'normal',
+						label: __( 'Normal', 'visual-portfolio' ),
+					},
+					{
+						value: 'hover',
+						label: __( 'Hover', 'visual-portfolio' ),
+						disabled: ! isPro,
+					},
+				] }
+			/>
 		</div>
 	);
 }
@@ -514,6 +511,9 @@ const ImageEditModal = function ( props ) {
 		attributes,
 	} = props;
 
+	const getModalControlKey = ( name, imageIdx ) =>
+		`${ img?.id || img?.imgThumbnailUrl || img?.imgUrl || 'bulk' }-${ imageIdx }-${ name }`;
+
 	let focalPointVal = normalizeFocalPointValue( img?.focalPoint );
 	let focalPointImageIdx = idx;
 
@@ -603,7 +603,10 @@ const ImageEditModal = function ( props ) {
 
 			if ( imageControls[ name ].type === 'section_heading' ) {
 				control = (
-					<div className="vpf-component-gallery-control-item-modal-heading vpf-component-gallery-control-item-modal-field-full">
+					<div
+						key={ getModalControlKey( name, imageIdx ) }
+						className="vpf-component-gallery-control-item-modal-heading vpf-component-gallery-control-item-modal-field-full"
+					>
 						<h3 className="vpf-component-gallery-control-item-modal-heading-title">
 							{ imageControls[ name ].label }
 						</h3>
@@ -618,9 +621,7 @@ const ImageEditModal = function ( props ) {
 				control = applyFilters(
 					'vpf.editor.gallery-controls-render',
 					<ControlsRender.Control
-						key={ `${
-							img?.id || img?.imgThumbnailUrl || img?.imgUrl
-						}-${ imageIdx }-${ name }` }
+						key={ getModalControlKey( name, imageIdx ) }
 						attributes={ attributes }
 						onChange={ ( val ) => {
 							onChange( {
@@ -774,16 +775,24 @@ const ImageEditModal = function ( props ) {
 							/>
 							{ leftModalControls.length ? (
 								<div className="vpf-component-gallery-control-item-modal-fields vpf-component-gallery-control-item-modal-fields-left">
-									{ leftModalControls.map(
-										( control ) => control.control
+									{ leftModalControls.map( ( control ) =>
+										isValidElement( control.control )
+											? cloneElement( control.control, {
+													key: control.name,
+											  } )
+											: control.control
 									) }
 								</div>
 							) : null }
 						</div>
 					) : null }
 					<div className="vpf-component-gallery-control-item-modal-fields">
-						{ rightModalControls.map(
-							( control ) => control.control
+						{ rightModalControls.map( ( control ) =>
+							isValidElement( control.control )
+								? cloneElement( control.control, {
+										key: control.name,
+								  } )
+								: control.control
 						) }
 					</div>
 				</div>
@@ -1374,7 +1383,7 @@ const SortableList = function ( props ) {
 								{ __( 'Show More', 'visual-portfolio' ) }
 							</Button>
 							<Button
-								isLink
+								variant="link"
 								onClick={ () => {
 									setShowingItems( items.length );
 								} }
