@@ -316,7 +316,7 @@ class Visual_Portfolio_Assets {
 		self::store_used_assets( 'visual-portfolio', true, 'script', 12 );
 
 		// Layout.
-		switch ( $options['layout'] ) {
+		switch ( $options['layout'] ?? '' ) {
 			case 'masonry':
 				self::store_used_assets( 'visual-portfolio-layout-masonry', true, 'script' );
 				self::store_used_assets( 'visual-portfolio-layout-masonry', true, 'style' );
@@ -344,7 +344,7 @@ class Visual_Portfolio_Assets {
 		self::store_used_assets( 'visual-portfolio-custom-scrollbar', true, 'style' );
 
 		// Items Style.
-		if ( $options['items_style'] ) {
+		if ( ! empty( $options['items_style'] ) ) {
 			$items_style_pref = '';
 
 			if ( 'default' !== $options['items_style'] ) {
@@ -370,7 +370,7 @@ class Visual_Portfolio_Assets {
 		}
 
 		// Popup.
-		if ( 'popup_gallery' === $options['items_click_action'] ) {
+		if ( 'popup_gallery' === ( $options['items_click_action'] ?? '' ) ) {
 			self::enqueue_popup_assets();
 		}
 
@@ -786,6 +786,8 @@ class Visual_Portfolio_Assets {
 
 				'click_to_zoom'                    => Visual_Portfolio_Settings::get_option( 'click_to_zoom', 'vp_popup_gallery' ),
 				'restore_focus'                    => Visual_Portfolio_Settings::get_option( 'restore_focus', 'vp_popup_gallery' ),
+				'loop'                             => Visual_Portfolio_Settings::get_option( 'loop', 'vp_popup_gallery' ),
+				'load_next_pages'                  => Visual_Portfolio_Settings::get_option( 'load_next_pages', 'vp_popup_gallery' ),
 			),
 
 			// Screen sizes (breakpoints) for responsive feature: xs, sm, md, lg, xl.

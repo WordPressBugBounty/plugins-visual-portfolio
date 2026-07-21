@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name:  Visual Portfolio, Posts & Image Gallery
- * Description:  Modern gallery and portfolio plugin with advanced layouts editor. Clean and powerful gallery styles with enormous settings in the Gutenberg block.
- * Version:      3.6.2
+ * Plugin Name:  Visual Portfolio
+ * Description:  Gallery and portfolio plugin with gallery blocks and layouts for the editor.
+ * Version:      3.7.0
  * Plugin URI:   https://www.visualportfolio.com/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=byline
  * Author:       Visual Portfolio Team
  * Author URI:   https://www.visualportfolio.com/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=byline
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! defined( 'VISUAL_PORTFOLIO_VERSION' ) ) {
-	define( 'VISUAL_PORTFOLIO_VERSION', '3.6.2' );
+	define( 'VISUAL_PORTFOLIO_VERSION', '3.7.0' );
 }
 
 if ( ! class_exists( 'Visual_Portfolio' ) ) :
@@ -218,6 +218,7 @@ if ( ! class_exists( 'Visual_Portfolio' ) ) :
 			require_once $this->plugin_path . 'classes/class-settings.php';
 			require_once $this->plugin_path . 'classes/class-welcome-screen.php';
 			require_once $this->plugin_path . 'classes/class-ask-review.php';
+			require_once $this->plugin_path . 'classes/class-dashboard.php';
 			require_once $this->plugin_path . 'classes/class-images.php';
 			require_once $this->plugin_path . 'classes/class-rest.php';
 			require_once $this->plugin_path . 'classes/class-get-portfolio.php';

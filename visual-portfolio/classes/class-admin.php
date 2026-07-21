@@ -1980,7 +1980,7 @@ class Visual_Portfolio_Admin {
 				'name'          => 'stretch',
 				'default'       => false,
 				'reload_iframe' => false,
-				'description'   => esc_attr__( 'Break container and display it wide. This option helpful for 3rd-party page builders, in the Gutenberg themes you can use the built in Wide and Fullwidth features.', 'visual-portfolio' ),
+				'description'   => esc_attr__( 'Break the container and display the gallery wide. Helpful for 3rd-party page builders. In the block editor, use the built-in Wide and Fullwidth alignment instead.', 'visual-portfolio' ),
 			)
 		);
 
@@ -2874,6 +2874,7 @@ class Visual_Portfolio_Admin {
 					'description'      => esc_html__( 'Image Description', 'visual-portfolio' ),
 					'item_title'       => esc_html__( 'Item Title', 'visual-portfolio' ),
 					'item_description' => esc_html__( 'Item Description', 'visual-portfolio' ),
+					'item_excerpt'     => esc_html__( 'Item Excerpt', 'visual-portfolio' ),
 					'item_author'      => esc_html__( 'Item Author', 'visual-portfolio' ),
 				),
 				'condition'     => array(
@@ -2901,6 +2902,7 @@ class Visual_Portfolio_Admin {
 					'description'      => esc_html__( 'Image Description', 'visual-portfolio' ),
 					'item_title'       => esc_html__( 'Item Title', 'visual-portfolio' ),
 					'item_description' => esc_html__( 'Item Description', 'visual-portfolio' ),
+					'item_excerpt'     => esc_html__( 'Item Excerpt', 'visual-portfolio' ),
 					'item_author'      => esc_html__( 'Item Author', 'visual-portfolio' ),
 				),
 				'condition'     => array(
