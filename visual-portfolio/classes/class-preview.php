@@ -123,6 +123,29 @@ class Visual_Portfolio_Preview {
 	}
 
 	/**
+	 * Scheme and host of a URL, without the path.
+	 *
+	 * @param string $url - URL to reduce.
+	 *
+	 * @return string origin, or an empty string when the URL has no host.
+	 */
+	public function get_url_origin( $url ) {
+		$parts = wp_parse_url( $url );
+
+		if ( empty( $parts['scheme'] ) || empty( $parts['host'] ) ) {
+			return '';
+		}
+
+		$origin = $parts['scheme'] . '://' . $parts['host'];
+
+		if ( ! empty( $parts['port'] ) ) {
+			$origin .= ':' . $parts['port'];
+		}
+
+		return $origin;
+	}
+
+	/**
 	 * Check if the page is preview.
 	 */
 	public function is_preview_check() {
@@ -230,9 +253,38 @@ class Visual_Portfolio_Preview {
 	}
 
 	/**
+	 * Join the editor's agent cluster when it is cross-origin isolated.
+	 *
+	 * Since WordPress 7.1 the block editor sends
+	 * `Document-Isolation-Policy: isolate-and-credentialless` (see
+	 * `wp_set_up_cross_origin_isolation()`), which puts the editor document in an
+	 * isolated agent cluster. Documents in different agent clusters cannot reach
+	 * each other synchronously even when they share an origin, so the editor
+	 * loses access to the preview `contentWindow` and the preview stays in its
+	 * loading state forever.
+	 *
+	 * The editor reports its own state in `vp_preview_isolated`, so the header is
+	 * sent only when the embedding document is isolated as well. Sending it
+	 * unconditionally would create the same mismatch in reverse on cores and
+	 * browsers that do not isolate the editor.
+	 */
+	public function maybe_send_isolation_header() {
+		// Nonce is verified in `is_preview_check()` before the preview renders.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$isolated = isset( $_POST['vp_preview_isolated'] ) ? Visual_Portfolio_Security::sanitize_boolean( $_POST['vp_preview_isolated'] ) : false;
+
+		if ( $isolated && ! headers_sent() ) {
+			header( 'Document-Isolation-Policy: isolate-and-credentialless' );
+		}
+	}
+
+	/**
 	 * Template of preview page.
 	 */
 	public function print_template() {
+		// Before `vpf_preview_template`, since a listener may start the output.
+		$this->maybe_send_isolation_header();
+
 		do_action( 'vpf_preview_template' );
 
 		// Tell to WP Cache plugins do not cache this request.
@@ -261,8 +313,29 @@ class Visual_Portfolio_Preview {
 		add_filter( 'wp_inline_script_attributes', array( $this, 'rocket_loader_inline_filter' ) );
 
 		// Enqueue assets.
-		Visual_Portfolio_Assets::enqueue_script( 'iframe-resizer-content', 'assets/vendor/iframe-resizer/js/iframeResizer.contentWindow.min', array(), '4.3.11' );
-		Visual_Portfolio_Assets::enqueue_script( 'visual-portfolio-preview', 'build/assets/js/preview', array( 'iframe-resizer-content' ) );
+		Visual_Portfolio_Assets::enqueue_script( 'visual-portfolio-preview', 'build/assets/js/preview' );
+
+		// Origins the editor may drive this preview from. The frame is served from `home_url`
+		// while the block editor runs on `admin_url`, and a site is free to put those on
+		// different hosts, so the frame cannot infer this from its own location.
+		wp_localize_script(
+			'visual-portfolio-preview',
+			'VPPreviewFrameVariables',
+			array(
+				'hostOrigins' => array_values(
+					array_unique(
+						array_filter(
+							array(
+								$this->get_url_origin( admin_url() ),
+								$this->get_url_origin( home_url() ),
+								$this->get_url_origin( site_url() ),
+							)
+						)
+					)
+				),
+			)
+		);
+
 		// Post data for script.
 		wp_localize_script(
 			'visual-portfolio-preview',

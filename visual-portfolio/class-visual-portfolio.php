@@ -2,7 +2,7 @@
 /**
  * Plugin Name:  Visual Portfolio
  * Description:  Gallery and portfolio plugin with gallery blocks and layouts for the editor.
- * Version:      3.7.1
+ * Version:      3.8.0
  * Plugin URI:   https://www.visualportfolio.com/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=byline
  * Author:       Visual Portfolio Team
  * Author URI:   https://www.visualportfolio.com/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=byline
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! defined( 'VISUAL_PORTFOLIO_VERSION' ) ) {
-	define( 'VISUAL_PORTFOLIO_VERSION', '3.7.1' );
+	define( 'VISUAL_PORTFOLIO_VERSION', '3.8.0' );
 }
 
 if ( ! class_exists( 'Visual_Portfolio' ) ) :
@@ -101,6 +101,34 @@ if ( ! class_exists( 'Visual_Portfolio' ) ) :
 		 */
 		public function is_pro() {
 			return defined( 'VISUAL_PORTFOLIO_PRO' ) || function_exists( 'visual_portfolio_pro' );
+		}
+
+		/**
+		 * Check if the Gallery Loop block family can be registered.
+		 *
+		 * The family is written against the current editor rather than the oldest
+		 * one it could be made to work on: Interactivity API and script modules
+		 * (6.5), block bindings (6.5), responsive block styles and interactive
+		 * state styling (7.1). Columns and hover states are expressed through the
+		 * viewport and `:hover` mechanisms core now owns instead of a private
+		 * fallback of ours, and that is the version those exist in.
+		 *
+		 * One gate for the whole family, so no file inside it needs a version
+		 * branch or a `function_exists` guard of its own.
+		 *
+		 * The plugin minimum stays where it is - the legacy blocks hold it, and
+		 * they keep working on every version they always did.
+		 *
+		 * @return bool
+		 */
+		public function supports_loop_blocks() {
+			// `7.1-RC2` and `7.1-beta1` carry the 7.1 APIs, but `version_compare`
+			// ranks a pre-release below the release it precedes, so comparing the
+			// raw string would refuse the blocks to exactly the people testing
+			// them earliest.
+			$version = preg_replace( '/-.*$/', '', get_bloginfo( 'version' ) );
+
+			return version_compare( $version, '7.1', '>=' );
 		}
 
 		/**
@@ -222,20 +250,48 @@ if ( ! class_exists( 'Visual_Portfolio' ) ) :
 			require_once $this->plugin_path . 'classes/class-images.php';
 			require_once $this->plugin_path . 'classes/class-rest.php';
 			require_once $this->plugin_path . 'classes/class-get-portfolio.php';
+			require_once $this->plugin_path . 'classes/class-tiles-parser.php';
 
 			require_once $this->plugin_path . 'classes/class-gutenberg.php';
 			require_once $this->plugin_path . 'gutenberg/block/index.php';
-			require_once $this->plugin_path . 'gutenberg/blocks/loop/index.php';
 			require_once $this->plugin_path . 'gutenberg/block-saved/index.php';
-			require_once $this->plugin_path . 'gutenberg/blocks/filter-by-category-item/index.php';
-			require_once $this->plugin_path . 'gutenberg/blocks/filter-by-category/index.php';
-			require_once $this->plugin_path . 'gutenberg/blocks/pagination/index.php';
-			require_once $this->plugin_path . 'gutenberg/blocks/pagination-next/index.php';
-			require_once $this->plugin_path . 'gutenberg/blocks/pagination-numbers/index.php';
-			require_once $this->plugin_path . 'gutenberg/blocks/pagination-previous/index.php';
-			require_once $this->plugin_path . 'gutenberg/blocks/pagination-load-more/index.php';
-			require_once $this->plugin_path . 'gutenberg/blocks/pagination-infinite/index.php';
-			require_once $this->plugin_path . 'gutenberg/blocks/sort/index.php';
+
+			// Gallery Loop block family, see `supports_loop_blocks()`.
+			if ( $this->supports_loop_blocks() ) {
+				require_once $this->plugin_path . 'gutenberg/blocks/loop/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-filter-item/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-filter/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-pagination/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-pagination-next/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-pagination-numbers/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-pagination-previous/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-pagination-trigger/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-sort/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-no-results/index.php';
+
+				// Before the item blocks: they ask it for the attributes that
+				// turn an item into a lightbox trigger.
+				require_once $this->plugin_path . 'gutenberg/popup/index.php';
+
+				// Shared by the item blocks that paint an overlay on a picture
+				// and by those that lay their children out on a gap.
+				require_once $this->plugin_path . 'gutenberg/utils/block-gap/index.php';
+				require_once $this->plugin_path . 'gutenberg/utils/item-overlay/index.php';
+
+				require_once $this->plugin_path . 'gutenberg/blocks/item-template/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/item-image/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/item-cover/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/item-title/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/item-description/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/item-categories/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/item-author/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/item-date/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/item-meta/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/item-read-more/index.php';
+
+				// Reads the context keys of the item template, so it follows it.
+				require_once $this->plugin_path . 'classes/class-block-bindings.php';
+			}
 
 			require_once $this->plugin_path . 'classes/class-shortcode.php';
 			require_once $this->plugin_path . 'classes/class-preview.php';
@@ -361,7 +417,8 @@ if ( ! class_exists( 'Visual_Portfolio' ) ) :
 				}
 
 				// Convert url to hostname, eg: "youtube" instead of "https://youtube.com/".
-				$data['provider-name'] = pathinfo( str_replace( array( 'www.' ), '', wp_parse_url( $url, PHP_URL_HOST ) ), PATHINFO_FILENAME );
+				// A URL with no host parses to null, which `str_replace()` is deprecated for taking since PHP 8.1.
+				$data['provider-name'] = pathinfo( str_replace( array( 'www.' ), '', (string) wp_parse_url( $url, PHP_URL_HOST ) ), PATHINFO_FILENAME );
 
 				// save cache.
 				set_transient( $cache_name, $data, DAY_IN_SECONDS );
