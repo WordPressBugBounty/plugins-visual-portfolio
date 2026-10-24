@@ -2,7 +2,7 @@
 /**
  * Plugin Name:  Visual Portfolio
  * Description:  Gallery and portfolio plugin with gallery blocks and layouts for the editor.
- * Version:      3.8.2
+ * Version:      3.9.0
  * Plugin URI:   https://www.visualportfolio.com/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=byline
  * Author:       Visual Portfolio Team
  * Author URI:   https://www.visualportfolio.com/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=byline
@@ -79,7 +79,7 @@ if (
 unset( $vpf_active_plugins );
 
 if ( ! defined( 'VISUAL_PORTFOLIO_VERSION' ) ) {
-	define( 'VISUAL_PORTFOLIO_VERSION', '3.8.2' );
+	define( 'VISUAL_PORTFOLIO_VERSION', '3.9.0' );
 }
 
 if ( ! class_exists( 'Visual_Portfolio' ) ) :
@@ -193,6 +193,33 @@ if ( ! class_exists( 'Visual_Portfolio' ) ) :
 		}
 
 		/**
+		 * Print nothing for a block of the Gallery Loop family where the family
+		 * is not registered.
+		 *
+		 * WordPress prints the saved markup of a block it does not know, which
+		 * for a loop is its wrapper and the texts of its No Results and End of
+		 * List. Short-circuiting the loop skips its inner blocks as well.
+		 *
+		 * @param string|null $pre_render   - the output so far.
+		 * @param array       $parsed_block - the block being rendered.
+		 *
+		 * @return string|null
+		 */
+		public function skip_unsupported_loop_blocks( $pre_render, $parsed_block ) {
+			$name = $parsed_block['blockName'] ?? '';
+
+			if (
+				null !== $pre_render ||
+				( 0 !== strpos( $name, 'visual-portfolio/loop' ) && 0 !== strpos( $name, 'visual-portfolio/item-' ) ) ||
+				$this->supports_loop_blocks()
+			) {
+				return $pre_render;
+			}
+
+			return '';
+		}
+
+		/**
 		 * Init options
 		 */
 		public function init() {
@@ -210,6 +237,7 @@ if ( ! class_exists( 'Visual_Portfolio' ) ) :
 			add_action( 'init', array( $this, 'earlier_init_hook' ), 5 );
 			add_action( 'init', array( $this, 'init_hook' ) );
 			add_action( 'init', array( $this, 'run_deferred_rewrite_rules' ), 20 );
+			add_filter( 'pre_render_block', array( $this, 'skip_unsupported_loop_blocks' ), 10, 2 );
 		}
 
 		/**
@@ -327,6 +355,7 @@ if ( ! class_exists( 'Visual_Portfolio' ) ) :
 			require_once $this->plugin_path . 'classes/class-images.php';
 			require_once $this->plugin_path . 'classes/class-rest.php';
 			require_once $this->plugin_path . 'classes/class-get-portfolio.php';
+			require_once $this->plugin_path . 'classes/class-custom-query-guard.php';
 			require_once $this->plugin_path . 'classes/class-tiles-parser.php';
 
 			require_once $this->plugin_path . 'classes/class-gutenberg.php';
@@ -335,6 +364,7 @@ if ( ! class_exists( 'Visual_Portfolio' ) ) :
 
 			// Gallery Loop block family, see `supports_loop_blocks()`.
 			if ( $this->supports_loop_blocks() ) {
+				require_once $this->plugin_path . 'classes/class-filter-terms.php';
 				require_once $this->plugin_path . 'gutenberg/blocks/loop/index.php';
 				require_once $this->plugin_path . 'gutenberg/blocks/loop-filter-item/index.php';
 				require_once $this->plugin_path . 'gutenberg/blocks/loop-filter/index.php';
@@ -343,8 +373,17 @@ if ( ! class_exists( 'Visual_Portfolio' ) ) :
 				require_once $this->plugin_path . 'gutenberg/blocks/loop-pagination-numbers/index.php';
 				require_once $this->plugin_path . 'gutenberg/blocks/loop-pagination-previous/index.php';
 				require_once $this->plugin_path . 'gutenberg/blocks/loop-pagination-trigger/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-pagination-end/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-carousel-nav/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-carousel-previous/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-carousel-next/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-carousel-indicator/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-carousel-autoplay/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-carousel-thumbnails/index.php';
 				require_once $this->plugin_path . 'gutenberg/blocks/loop-sort/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-search/index.php';
 				require_once $this->plugin_path . 'gutenberg/blocks/loop-no-results/index.php';
+				require_once $this->plugin_path . 'gutenberg/blocks/loop-query-total/index.php';
 
 				// Before the item blocks: they ask it for the attributes that
 				// turn an item into a lightbox trigger.
@@ -354,6 +393,7 @@ if ( ! class_exists( 'Visual_Portfolio' ) ) :
 				// and by those that lay their children out on a gap.
 				require_once $this->plugin_path . 'gutenberg/utils/block-gap/index.php';
 				require_once $this->plugin_path . 'gutenberg/utils/item-overlay/index.php';
+				require_once $this->plugin_path . 'gutenberg/utils/item-format-badge/index.php';
 
 				require_once $this->plugin_path . 'gutenberg/blocks/item-template/index.php';
 				require_once $this->plugin_path . 'gutenberg/blocks/item-image/index.php';

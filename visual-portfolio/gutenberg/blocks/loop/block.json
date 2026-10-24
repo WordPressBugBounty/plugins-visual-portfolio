@@ -49,6 +49,10 @@
 				"avoidDuplicates": false,
 				"excludeCurrent": false,
 				"keyword": "",
+				"sticky": "",
+				"authors": [],
+				"formats": [],
+				"excludeTaxonomies": [],
 				"customQuery": ""
 			}
 		},
@@ -67,9 +71,9 @@
 			"type": "object",
 			"default": {}
 		},
-		"customCss": {
-			"type": "string",
-			"default": ""
+		"lightbox": {
+			"type": "object",
+			"default": {}
 		},
 		"preview_image_example": {
 			"type": "string",
@@ -78,6 +82,10 @@
 		"previewLayout": {
 			"type": "string",
 			"default": "default"
+		},
+		"extensions": {
+			"type": "object",
+			"default": {}
 		}
 	},
 	"viewScriptModule": "visual-portfolio-block-loop-view",
@@ -87,7 +95,9 @@
 		"anchor": true,
 		"interactivity": true,
 		"align": ["wide", "full"],
-		"layout": true,
+		"layout": {
+			"allowEditing": false
+		},
 		"typography": {
 			"fontSize": true,
 			"lineHeight": true,
@@ -134,6 +144,7 @@
 		"vp/postsQuery": "postsQuery",
 		"vp/imagesQuery": "imagesQuery",
 		"vp/sourceQuery": "sourceQuery",
-		"vp/blockId": "block_id"
+		"vp/blockId": "block_id",
+		"vp/lightbox": "lightbox"
 	}
 }

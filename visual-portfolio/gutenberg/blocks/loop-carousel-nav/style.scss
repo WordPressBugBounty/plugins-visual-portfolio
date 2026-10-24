@@ -1,0 +1,680 @@
+// The controls of a carousel gallery. One stylesheet for the four blocks: they
+// are one control surface split into blocks so that a gallery can put its
+// arrows and its indicator wherever they belong, and a visitor should not be
+// able to tell which of them the theme loaded.
+//
+// Every one of them moves the scroll container through the scroll API, and
+// there is nothing to fall back to when that API has nobody calling it - so the
+// server renders them switched off and the module takes the class away once it
+// has a carousel running. A control that ended up beside a grid keeps it, and
+// stays out of the way.
+.vp-block-loop-carousel-nav.vp-carousel-control-idle,
+.vp-block-loop-carousel-previous.vp-carousel-control-idle,
+.vp-block-loop-carousel-next.vp-carousel-control-idle,
+.vp-block-loop-carousel-autoplay.vp-carousel-control-idle,
+.vp-block-loop-carousel-thumbnails.vp-carousel-control-idle,
+.vp-block-loop-carousel-indicator.vp-carousel-control-idle {
+	display: none;
+}
+
+// A row for the controls and nothing else: the layout support draws the flex
+// rules, and everything inside it is a block of its own.
+
+.vp-block-loop-carousel-previous,
+.vp-block-loop-carousel-next,
+.vp-block-loop-carousel-autoplay {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+
+	// Sized in `em` so that the font size control is the size control - there
+	// is no text in the button for it to do anything else with. The glyph is
+	// an em too, so this one length is the size of the drawing and of the
+	// button drawn around it, and a theme can set either from a variable
+	// without going near the block.
+	width: 2.25em;
+	height: 2.25em;
+	padding: 0;
+	font-size: var(--vp-carousel-arrow-size, 0.875rem);
+	cursor: pointer;
+	border-radius: 50%;
+	transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+
+	// Plain unless a block style says otherwise: the glyph and nothing around
+	// it. The colours are variables so that a style can restate them, and an
+	// arrow the block supports have already coloured keeps its colours.
+	&:not(.has-text-color) {
+		color: var(--vp-carousel-arrow-color, inherit);
+	}
+
+	&:not(.has-background) {
+		background-color: var(--vp-carousel-arrow-background, transparent);
+	}
+
+	border: 1px solid var(--vp-carousel-arrow-border, transparent);
+
+	&:hover:not([disabled]):not(.has-background) {
+		background-color: var(--vp-carousel-arrow-background-hover, transparent);
+	}
+
+	&:hover:not([disabled]) {
+		border-color: var(--vp-carousel-arrow-border-hover, transparent);
+		opacity: var(--vp-carousel-arrow-hover-opacity, 0.7);
+	}
+
+	// Outlined: a ring of the text colour around a transparent button.
+	// Written out rather than taken from `--vp-carousel-track`, which is the
+	// unfilled part of an indicator: an arrow is drawn the same whether it
+	// was dropped in the row beside one or in the heading above the gallery.
+	&.is-style-outlined {
+		--vp-carousel-arrow-border: color-mix(in oklab, currentcolor 20%, transparent 80%);
+		--vp-carousel-arrow-border-hover: currentcolor;
+		--vp-carousel-arrow-background-hover: color-mix(in oklab, currentcolor 8%, transparent 92%);
+		--vp-carousel-arrow-hover-opacity: 1;
+	}
+
+	// Filled: a dark pill with a white glyph, which is the one pair that reads
+	// over a photograph as well as it does on a page.
+	&.is-style-filled {
+		--vp-carousel-arrow-color: #fff;
+		--vp-carousel-arrow-background: rgba(0, 0, 0, 0.5);
+		--vp-carousel-arrow-background-hover: rgba(0, 0, 0, 0.7);
+		--vp-carousel-arrow-hover-opacity: 1;
+	}
+
+	// The end of the carousel, when it has one to run out of.
+	&[disabled] {
+		cursor: default;
+		opacity: 0.35;
+	}
+
+	// A pointer never draws the ring; the keyboard always does.
+	&:focus {
+		outline: none;
+	}
+
+	&:focus-visible {
+		outline: 2px solid currentcolor;
+		outline-offset: 2px;
+	}
+
+	// The glyph is a drawing rather than a shape built out of borders: a
+	// chevron of two borders on a rotated square has to be nudged back into
+	// the middle of the button by hand, its two arms cannot be given round
+	// ends, and an arrow needs a second box drawn behind it for the shaft.
+	//
+	// Painted through a mask rather than laid in as a picture, so the drawing
+	// carries no colour of its own and the button's does: the colour the
+	// block was given, the white the controls take over a photograph, and
+	// every state in between, all without a second copy of the file.
+	> span {
+		width: 1em;
+		height: 1em;
+		background-color: currentcolor;
+		mask: var(--vp-carousel-icon) center / 1em 1em no-repeat;
+	}
+}
+
+// The arrows are one drawing pointing one way. The button that goes back
+// turns it over, and a row that reads the other way turns both of them over
+// again - which a stylesheet flipped for that reading cannot do for itself,
+// the drawing being a file rather than a length.
+.vp-block-loop-carousel-previous,
+.vp-block-loop-carousel-next {
+	--vp-carousel-icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='m9.5 4.5 7.5 7.5-7.5 7.5' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+
+	&.has-arrow-icon {
+		--vp-carousel-icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M3.75 12h16.5m-7-7 7 7-7 7' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+	}
+}
+
+.vp-block-loop-carousel-previous > span,
+.vp-block-loop-carousel-next:dir(rtl) > span {
+	scale: -1 1;
+}
+
+.vp-block-loop-carousel-previous:dir(rtl) > span {
+	scale: 1 1;
+}
+
+// The play and pause button borrows the box of an arrow and draws its own
+// glyph: two bars while the carousel is running, a triangle once it has been
+// stopped.
+.vp-block-loop-carousel-autoplay {
+	--vp-carousel-icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M9 4.75v14.5M15 4.75v14.5' fill='none' stroke='black' stroke-width='3'/></svg>");
+
+	// A square for a gallery that reads better with one.
+	&.has-stop-icon {
+		--vp-carousel-icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='5.75' y='5.75' width='12.5' height='12.5' rx='2' fill='black'/></svg>");
+	}
+}
+
+// Stopped: the button offers the way back, so it becomes a play triangle
+// whichever glyph it was drawn with.
+.vp-carousel-is-stopped .vp-block-loop-carousel-autoplay {
+	--vp-carousel-icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M8.5 5.5 19 12 8.5 18.5Z' fill='black' stroke='black' stroke-width='2.5' stroke-linejoin='round'/></svg>");
+}
+
+
+.vp-block-loop-carousel-indicator {
+	--vp-carousel-track: color-mix(in oklab, currentcolor 10%, transparent 90%);
+
+	display: flex;
+	align-items: center;
+}
+
+.vp-block-loop-carousel-indicator--dots {
+	--vp-carousel-dot-size: 6px;
+	--vp-carousel-dot-slot: 14px;
+	--vp-carousel-dot-active-size: 18px;
+	--vp-carousel-dot-spread: calc(
+		(var(--vp-carousel-dot-active-size) - var(--vp-carousel-dot-size)) / 2
+	);
+	// Which way along the row is forwards. Everything that moves a dot is
+	// worked out in the order the dots are read in - a step aside here, the
+	// shift of a window in the module - and comes out as a translate, which
+	// is a direction on the screen. In a row that reads the other way the two
+	// are opposites.
+	--vp-carousel-dot-way: 1;
+	--vp-carousel-dot-ground: Canvas;
+	--vp-carousel-dot-tone: 18%;
+	--vp-carousel-dot-track-tone: 42%;
+	--vp-carousel-dot-color: color-mix(in oklab, currentcolor var(--vp-carousel-dot-tone), var(--vp-carousel-dot-ground));
+	--vp-carousel-dot-track: color-mix(in oklab, currentcolor var(--vp-carousel-dot-track-tone), var(--vp-carousel-dot-ground));
+
+	&:dir(rtl) {
+		--vp-carousel-dot-way: -1;
+	}
+
+	gap: 0;
+	box-sizing: content-box;
+	inline-size: calc(var(--vp-carousel-dots-count, 3) * var(--vp-carousel-dot-slot) + var(--vp-carousel-dot-spread) * 2);
+
+	// Filled by the module, one per slide: a Load More brings more slides and a
+	// filter takes some away, and the dots follow.
+	&:empty {
+		display: none;
+	}
+
+	// A row given a window shows a few dots at a time and slides the rest under
+	// it. Every dot stays in the page - the module only moves them - so each one
+	// is still a button naming a slide, and still reachable by keyboard.
+	//
+	// `clip` rather than `hidden`: a hidden box is a scroll container, and the
+	// browser would scroll it to a dot that took focus, fighting the shift the
+	// module writes. Clipping cannot scroll, and the module answers focus itself.
+
+	position: relative;
+	isolation: isolate;
+
+	&.is-collapsed {
+		max-width: calc(var(--vp-carousel-dots-visible, 5) * var(--vp-carousel-dot-slot) + var(--vp-carousel-dot-spread) * 2);
+		overflow: clip;
+
+		> .vp-block-loop-carousel-dot {
+			// Shrinking away towards the edges rather than being cut in half,
+			// so the row reads as a window onto more dots: the one beside the
+			// slide on screen is whole, the next in is smaller, and the one at
+			// the edge is smaller again.
+			//
+			// The mark shrinks, not the button around it. Scaling the button
+			// took the target with it, and the dots at the edge of the window
+			// - the ones a visitor reaches for to go further - became too
+			// small to press.
+			&.is-edge > .vp-block-loop-carousel-dot-value {
+				scale: 0.7;
+			}
+
+			&.is-edge-far > .vp-block-loop-carousel-dot-value {
+				scale: 0.4;
+				opacity: 0.6;
+			}
+		}
+	}
+}
+
+// The button width includes the same gap on either side of its mark.
+.vp-block-loop-carousel-dot {
+	position: relative;
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	inline-size: var(--vp-carousel-dot-slot, 18px);
+	block-size: var(--vp-carousel-dot-slot, 18px);
+	padding: 0;
+	color: inherit;
+	cursor: pointer;
+	background: none;
+	border: 0;
+	border-radius: 50%;
+	translate: calc(
+		var(--vp-carousel-dots-shift, 0px) * var(--vp-carousel-dot-way, 1)
+	);
+	transition: translate 0.25s ease, inline-size 0.25s ease;
+
+	&:focus {
+		outline: none;
+	}
+
+	&:focus-visible {
+		outline: 2px solid currentcolor;
+		outline-offset: -2px;
+	}
+}
+
+.vp-block-loop-carousel-dot-value {
+	position: relative;
+	flex: none;
+	inline-size: calc(100% - var(--vp-carousel-dot-slot, 18px) + var(--vp-carousel-dot-size, 6px));
+	block-size: var(--vp-carousel-dot-size, 6px);
+	overflow: hidden;
+	pointer-events: none;
+	background-color: var(--vp-carousel-dot-color);
+	border-radius: calc(var(--vp-carousel-dot-size, 6px) / 2);
+	transition: background-color 0.25s ease, opacity 0.2s ease, scale 0.25s ease;
+}
+
+.vp-block-loop-carousel-dot[aria-current="true"] {
+	z-index: 1;
+	inline-size: calc(var(--vp-carousel-dot-slot, 18px) + var(--vp-carousel-dot-active-size, 18px) - var(--vp-carousel-dot-size, 6px));
+
+	> .vp-block-loop-carousel-dot-value {
+		background-color: currentcolor;
+	}
+}
+
+.vp-block-loop-carousel-dot-progress {
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: 0;
+	width: 0;
+	background-color: currentcolor;
+	border-radius: inherit;
+}
+
+.vp-carousel-is-playing:not(.vp-carousel-is-stopped)
+	.vp-block-loop-carousel-dot[aria-current="true"] {
+	> .vp-block-loop-carousel-dot-value {
+		background-color: var(--vp-carousel-dot-track);
+
+		> .vp-block-loop-carousel-dot-progress {
+			width: var(--vp-carousel-autoplay-progress, 0%);
+		}
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.vp-block-loop-carousel-dot,
+	.vp-block-loop-carousel-dot-value {
+		transition: none;
+	}
+}
+
+// A strip of small pictures, one per slide, that the carousel can be steered
+// by. It scrolls on its own - a gallery of forty has more thumbnails than a
+// row can hold - and the module brings the one on screen into the middle of it.
+.vp-block-loop-carousel-thumbnails {
+	// The box a thumbnail measures its position from: the module reads
+	// `offsetLeft` to bring the one on screen into view, and that answers for
+	// the nearest positioned ancestor.
+	position: relative;
+	display: flex;
+	gap: var(--vp-carousel-thumb-gap, 8px);
+	overflow-x: auto;
+	scrollbar-width: none;
+	scroll-behavior: smooth;
+	overscroll-behavior-x: contain;
+
+	&::-webkit-scrollbar {
+		display: none;
+	}
+}
+
+.vp-block-loop-carousel-thumb {
+	flex: none;
+	width: calc(var(--vp-carousel-thumb-height, 72px) * var(--vp-carousel-thumb-ratio, 1));
+	height: var(--vp-carousel-thumb-height, 72px);
+	padding: 0;
+	overflow: hidden;
+	cursor: pointer;
+	background: none;
+	border: 0;
+	border-radius: 4px;
+	// The one on screen is told apart by a ring rather than by a size: a strip
+	// whose boxes changed size would reflow every time the carousel moved.
+	outline: 2px solid transparent;
+	outline-offset: -2px;
+	opacity: var(--vp-carousel-thumb-opacity, 1);
+	transition: opacity 0.2s ease, outline-color 0.2s ease;
+
+	img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+
+	// An item with no picture keeps its place in the strip, so that pressing a
+	// thumbnail always reaches the slide beside it.
+	&:empty,
+	&.is-placeholder {
+		background-color: var(--vp-carousel-track, color-mix(in oklab, currentcolor 10%, transparent 90%));
+	}
+
+	&[aria-current="true"] {
+		outline-color: currentcolor;
+		opacity: 1;
+	}
+
+	&:focus {
+		outline-color: currentcolor;
+	}
+
+	&:focus-visible {
+		outline: 2px solid currentcolor;
+		outline-offset: 2px;
+	}
+}
+
+// Dimmed: everything but the slide on screen steps back, which reads better
+// under a large picture than a ring does.
+.vp-block-loop-carousel-thumbnails.is-style-dimmed {
+	--vp-carousel-thumb-opacity: 0.45;
+
+	.vp-block-loop-carousel-thumb[aria-current="true"] {
+		outline-color: transparent;
+	}
+}
+
+// The slide on screen and how many there are. Tabular figures so that the
+// number does not jump about as it counts past nine, and the pair sized as one
+// so a theme can set it in the type of the gallery around it.
+.vp-block-loop-carousel-indicator--counter {
+	gap: 0.35em;
+	// Smaller than the text around it and set heavier to hold its own at that
+	// size: a pair of numbers beside two arrows is a caption, not a heading.
+	font-size: 0.6875em;
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+}
+
+.vp-block-loop-carousel-counter-separator {
+	opacity: 0.5;
+}
+
+.vp-block-loop-carousel-counter-total {
+	opacity: 0.7;
+}
+.vp-block-loop-carousel-indicator--progress {
+	position: relative;
+	width: min(180px, 60%);
+	height: 4px;
+	background-color: var(--vp-carousel-track, color-mix(in oklab, currentcolor 10%, transparent 90%));
+	border-radius: 2px;
+
+	// A bar the visitor may take hold of says so, and is reachable. One that
+	// may not is left as it was: something to read, not to press.
+	&.is-draggable {
+		cursor: grab;
+		// The drag is the bar's, frame by frame: a browser that took the
+		// gesture for a scroll of the page would cancel it halfway.
+		touch-action: none;
+
+		&:active {
+			cursor: grabbing;
+		}
+
+		// Four pixels is not something a finger can take hold of. The bar
+		// keeps its own height and is given a target twenty four pixels tall
+		// around it, which is what a pointer has to be able to reach - and
+		// which the bar must not clip, so the fill clips itself instead.
+		&::before {
+			position: absolute;
+			inset-block: -10px;
+			inset-inline: 0;
+			content: "";
+		}
+
+		&:focus {
+			outline: none;
+		}
+
+		&:focus-visible {
+			outline: 2px solid currentcolor;
+			outline-offset: 4px;
+		}
+	}
+}
+
+
+.vp-block-loop-carousel-progress-value {
+	display: block;
+	width: min(100%, var(--vp-carousel-progress, 0%));
+	height: 100%;
+	background-color: currentcolor;
+	border-radius: inherit;
+
+	// No transition of its own. The fill is rewritten from the scroll position
+	// on every frame the carousel moves, so it is already as smooth as the
+	// carousel is - and an easing on top of that only made the bar lag behind
+	// the slides it is reporting on.
+}
+
+// The box an indicator sits in, a block style: a pill outlined in the text colour, or filled
+// dark with the dots in white - the pair that reads over a photograph. The
+// dots and the bar are drawn the same in every box; the bar keeps its
+// height, and its track is painted on the content box alone so that the box
+// around it can carry a paint of its own.
+.vp-block-loop-carousel-indicator.is-style-outlined,
+.vp-block-loop-carousel-indicator.is-style-filled {
+	padding: 8px 12px;
+	border-radius: 999px;
+
+	&.vp-block-loop-carousel-indicator--progress {
+		box-sizing: content-box;
+		height: 4px;
+		background: linear-gradient(var(--vp-carousel-track), var(--vp-carousel-track)) content-box;
+	}
+}
+
+.vp-block-loop-carousel-indicator.is-style-outlined {
+	border: 1px solid color-mix(in oklab, currentcolor 20%, transparent 80%);
+}
+
+.vp-block-loop-carousel-indicator.is-style-filled {
+	// Drawn on the dark pill of the style rather than on the page, so the
+	// dots are white on a shadow here too.
+	--vp-carousel-dot-ground: rgba(0, 0, 0, 0.65);
+	--vp-carousel-dot-tone: 62%;
+	--vp-carousel-dot-track-tone: 85%;
+	--vp-carousel-track: rgba(255, 255, 255, 0.4);
+
+	background-color: rgba(0, 0, 0, 0.5);
+
+	&:not(.has-text-color) {
+		color: #fff;
+	}
+
+	&.vp-block-loop-carousel-indicator--progress {
+		background: linear-gradient(var(--vp-carousel-track), var(--vp-carousel-track)) content-box, rgba(0, 0, 0, 0.5) padding-box;
+	}
+}
+
+// Controls over the slides.
+//
+// A control dropped inside the gallery - the item template - is not one of its
+// items: the template renders it once, beside the list rather than in it, and
+// inside the frame the list scrolls in. The frame is the one box of a carousel
+// that stays put, so the control is pinned to it: arrows at either edge, an
+// indicator along the foot, a row across the whole of it.
+//
+// The editor draws the same blocks inside the item being edited instead - the
+// one place the block editor can put them - and the frame is still the box
+// they are placed against: nothing between the two is positioned, so the
+// list's own clipping never reaches them.
+$frame: ".wp-block-visual-portfolio-item-template__carousel-frame";
+$item: ".wp-block-visual-portfolio-item-template__item";
+$card: ".wp-block-visual-portfolio-item-template__card";
+
+// Built one control at a time: a list interpolated after the combinator
+// would leave every control but the first without its box, and pin every
+// arrow on the page.
+@mixin over-the-slides($controls) {
+	$selectors: ();
+
+	@each $control in $controls {
+		@each $box in ($frame, $item, $card) {
+			$selectors: append($selectors, "#{$box} > #{$control}", comma);
+		}
+	}
+
+	#{$selectors} {
+		@content;
+	}
+}
+
+@include over-the-slides((".vp-block-loop-carousel-nav", ".vp-block-loop-carousel-previous", ".vp-block-loop-carousel-next", ".vp-block-loop-carousel-autoplay", ".vp-block-loop-carousel-indicator", ".vp-block-loop-carousel-thumbnails")) {
+	--vp-carousel-track: rgba(255, 255, 255, 0.4);
+	// Over the pictures there is no page behind a dot to mix with, so the
+	// ground it is drawn on is the shadow the controls carry over a
+	// photograph.
+	//
+	// And the dots are drawn far lighter here than they are on a page. A dot
+	// on a page is a faint mark on a plain ground; over a photograph the same
+	// mixture came out as a dark smudge, near enough the pictures behind it
+	// to be lost against them. The shadow is kept - it is what holds the row
+	// against a light photograph - but the white is most of the mixture now.
+	--vp-carousel-dot-ground: rgba(0, 0, 0, 0.35);
+	--vp-carousel-dot-tone: 65%;
+	--vp-carousel-dot-track-tone: 88%;
+
+	position: absolute;
+	z-index: 2;
+	margin: 0;
+
+	// White, unless the block was coloured: nothing else reads over a
+	// photograph.
+	&:not(.has-text-color) {
+		color: #fff;
+	}
+}
+
+@include over-the-slides((".vp-block-loop-carousel-nav",)) {
+	inset: 0;
+
+	// The slides underneath still have to take a drag, a swipe and a click.
+	pointer-events: none;
+
+	> * {
+		pointer-events: auto;
+	}
+
+	// Pinned to the sides rather than laid out in the row, so the justification
+	// of the row is left to whatever else was dropped in it.
+	.vp-block-loop-carousel-previous,
+	.vp-block-loop-carousel-next {
+		position: absolute;
+		top: 50%;
+		transform: translateY(-50%);
+	}
+
+	.vp-block-loop-carousel-previous {
+		inset-inline-start: 12px;
+	}
+
+	.vp-block-loop-carousel-next {
+		inset-inline-end: 12px;
+	}
+
+	// An indicator over the pictures belongs at the foot of them rather than
+	// across the middle of them.
+	.vp-block-loop-carousel-indicator {
+		align-self: flex-end;
+		margin-bottom: 12px;
+	}
+
+	// The button that stops the carousel sits in the corner, out of the way of
+	// the arrows and of whatever the pictures are of.
+	.vp-block-loop-carousel-autoplay {
+		position: absolute;
+		top: 12px;
+		inset-inline-end: 12px;
+	}
+}
+
+// An arrow or an indicator dropped in on its own goes where the row would
+// have put it.
+@include over-the-slides((".vp-block-loop-carousel-previous", ".vp-block-loop-carousel-next")) {
+	top: 50%;
+	transform: translateY(-50%);
+}
+
+@include over-the-slides((".vp-block-loop-carousel-previous",)) {
+	inset-inline-start: 12px;
+}
+
+@include over-the-slides((".vp-block-loop-carousel-next",)) {
+	inset-inline-end: 12px;
+}
+
+@include over-the-slides((".vp-block-loop-carousel-thumbnails",)) {
+	inset-inline: 12px;
+	bottom: 12px;
+}
+
+@include over-the-slides((".vp-block-loop-carousel-autoplay",)) {
+	top: 12px;
+	inset-inline-end: 12px;
+}
+
+@include over-the-slides((".vp-block-loop-carousel-indicator",)) {
+	inset-inline: 0;
+	bottom: 12px;
+	width: fit-content;
+	margin-inline: auto;
+
+	&.vp-block-loop-carousel-indicator--dots {
+		width: calc(var(--vp-carousel-dots-count, 3) * var(--vp-carousel-dot-slot) + var(--vp-carousel-dot-spread) * 2);
+	}
+
+	&.vp-block-loop-carousel-indicator--progress {
+		width: min(180px, 60%);
+	}
+}
+
+// A carousel held to a container keeps its controls inside it too: an arrow
+// pinned to the far edge of a full width gallery sits beside a slide that is
+// half off the page, which is not a place a visitor would look for it. Only
+// the controls pinned to the frame - the ones drawn inside a slide are
+// already as far in as the container is.
+#{$frame} > .vp-block-loop-carousel-nav,
+#{$frame} > .vp-block-loop-carousel-indicator {
+	inset-inline: var(--vp-carousel-inset, 0);
+}
+
+#{$frame} > .vp-block-loop-carousel-previous {
+	inset-inline-start: calc(var(--vp-carousel-inset, 0px) + 12px);
+}
+
+#{$frame} > .vp-block-loop-carousel-next {
+	inset-inline-end: calc(var(--vp-carousel-inset, 0px) + 12px);
+}
+
+// A control that waits for the pointer. Only where there is a pointer to
+// wait for: a touch screen has no hover, and a control it never showed would
+// be a control it does not have. The keyboard brings it out as well - the
+// list takes focus, and so does the control itself.
+@media (hover: hover) {
+	#{$frame} > .is-shown-on-hover {
+		opacity: 0;
+		transition: opacity 0.2s ease;
+	}
+
+	#{$frame}:hover > .is-shown-on-hover,
+	#{$frame}:focus-within > .is-shown-on-hover {
+		opacity: 1;
+	}
+}

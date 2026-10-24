@@ -1,30 +1,91 @@
-// The tiles picker. Every preset is drawn from the pattern it stands for, so
+// The colours of the editor, read the way its own components read them: a
+// variable an install may set, the design token behind it, and last the
+// plain value the editor has always drawn with.
+$accent: var(--wp-components-color-accent, var(--wp-admin-theme-color, #3858e9));
+$background: var(--wp-components-color-background, var(--wpds-color-background-surface-neutral-strong, #fff));
+$foreground: var(--wp-components-color-foreground, var(--wpds-color-foreground-content-neutral, #1e1e1e));
+$gray-100: var(--wp-components-color-gray-100, var(--wpds-color-stroke-surface-neutral-weak, #f0f0f0));
+$gray-300: var(--wp-components-color-gray-300, var(--wpds-color-stroke-surface-neutral, #ddd));
+$gray-600: var(--wp-components-color-gray-600, var(--wpds-color-stroke-interactive-neutral, #949494));
+$gray-700: var(--wp-components-color-gray-700, var(--wpds-color-foreground-content-neutral-weak, #757575));
+
+// The tiles presets. Every preset is drawn from the pattern it stands for, so
 // the catalogue is whatever `vpf_loop_tiles_presets` returns and nothing here
-// has to be kept in step with it.
+// has to be kept in step with it. The grid opens in a popover, from the
+// select above the pattern editor and from the block toolbar alike.
+.vp-tiles-presets-popover .components-popover__content {
+	width: 272px;
+	padding: 8px;
+}
+
 .vp-tiles-presets {
 	display: grid;
 	grid-template-columns: repeat(4, 1fr);
 	gap: 8px;
-	margin-bottom: 16px;
 	max-height: 320px;
 	overflow-y: auto;
+}
+
+// The select: the toggle is drawn as the editor draws a select, and shows
+// the pattern in hand as a swatch beside its name.
+.vp-tiles-presets-select__dropdown {
+	display: block;
+	width: 100%;
+}
+
+.vp-tiles-presets-select__toggle.components-button {
+	width: 100%;
+	height: 40px;
+	padding: 0 8px 0 12px;
+	color: $foreground;
+	border: 1px solid $gray-600;
+	border-radius: 2px;
+
+	&:hover:not(:disabled) {
+		color: $foreground;
+		border-color: $accent;
+	}
+
+	&[aria-expanded="true"],
+	&:focus:not(:disabled) {
+		border-color: $accent;
+		box-shadow: 0 0 0 1px $accent;
+	}
+}
+
+.vp-tiles-presets-select__swatch.vp-tiles-preset__grid {
+	flex: 0 0 auto;
+	width: 24px;
+	margin-right: 8px;
+
+	// A swatch that fits beside a line of text.
+	grid-auto-rows: 4px;
+	gap: 1px;
+}
+
+.vp-tiles-presets-select__label {
+	flex: 1 1 auto;
+	overflow: hidden;
+	text-align: left;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .vp-tiles-preset {
 	padding: 4px;
 	cursor: pointer;
 	background: none;
-	border: 1px solid #ddd;
+	border: 1px solid $gray-300;
 	border-radius: 2px;
 
 	&:hover,
 	&:focus-visible {
-		border-color: var(--wp-admin-theme-color, #3858e9);
+		border-color: $accent;
 	}
 
 	&.is-active {
-		border-color: var(--wp-admin-theme-color, #3858e9);
-		box-shadow: 0 0 0 1px var(--wp-admin-theme-color, #3858e9);
+		border-color: $accent;
+		box-shadow: 0 0 0 1px $accent;
 	}
 }
 
@@ -93,8 +154,13 @@
 }
 
 // The read-only copy of the item sits between the tile and the blocks, so the
-// height chain a tile needs runs through it as well.
-.vp-layout-tiles > .wp-block-visual-portfolio-item-template__item > .wp-block-visual-portfolio-item-template__preview {
+// height chain a tile needs runs through it as well - and so does the one a
+// carousel needs when its blocks fill the slide. Without it the copy is as
+// tall as its contents and the picture inside it grows to match, so a slide
+// changed height the moment it was selected and the copy gave way to the
+// blocks themselves.
+.vp-layout-tiles > .wp-block-visual-portfolio-item-template__item > .wp-block-visual-portfolio-item-template__preview,
+.vp-carousel-stretch-slides > .wp-block-visual-portfolio-item-template__item > .wp-block-visual-portfolio-item-template__preview {
 	display: flex;
 	flex: 1 1 auto;
 	flex-direction: column;
@@ -116,4 +182,59 @@
 // height of the cell rather than a square of its own.
 .vp-layout-tiles > .wp-block-visual-portfolio-item-template__skeleton {
 	aspect-ratio: auto;
+}
+
+// Controls over the slides, in the editor.
+//
+// A carousel control dropped into the template is drawn inside the item being
+// edited - the one place the block editor can put it - and positioned against
+// the frame, the way the page pins it. Nothing between the two may be
+// positioned, or the control would be placed against that instead and scroll
+// away with the list. The block editor positions every block, the list
+// included, so the list is put back.
+.block-editor-block-list__layout .wp-block-visual-portfolio-item-template.vp-layout-carousel {
+	position: static;
+}
+
+// An effect turns the card and gives the slide a perspective, and either
+// makes the card the box the control is placed against. The item being
+// edited is drawn flat while it holds a control - at the first slide, which
+// is where the editor rests a carousel, that is how an effect draws it
+// anyway.
+.wp-block-visual-portfolio-item-template__item:has(> .wp-block-visual-portfolio-item-template__slide > .wp-block-visual-portfolio-item-template__card > [class*="vp-block-loop-carousel-"]) {
+	> .wp-block-visual-portfolio-item-template__slide,
+	> .wp-block-visual-portfolio-item-template__slide > .wp-block-visual-portfolio-item-template__card {
+		perspective: none;
+		animation: none;
+	}
+}
+
+// Always shown on the canvas: a control the pointer has to find is a control
+// that cannot be selected.
+.wp-block-visual-portfolio-item-template__carousel-frame .is-shown-on-hover {
+	opacity: 1;
+}
+
+// A pair of controls under one legend, the way the core grid layout asks for a
+// column width and a column count. The fieldset is only there to carry the
+// legend, and core strips the same three properties off its own.
+.vpf-columns-control {
+	padding: 0;
+	margin: 0;
+	border: 0;
+}
+
+// The width of a carousel container, asked for in the menu that switches it:
+// a menu is where the setting is, so a number typed for it belongs there too.
+.vpf-container-width__custom {
+	padding: 8px 12px 12px;
+	border-top: 1px solid #e0e0e0;
+}
+
+// Why a carousel has no container to hold its slides to, where the help of the
+// setting would be.
+.vpf-container-width__help {
+	margin: 8px 12px;
+	color: #757575;
+	font-size: 12px;
 }

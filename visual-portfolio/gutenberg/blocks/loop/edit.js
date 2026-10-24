@@ -23,6 +23,7 @@ import {
 import { useDispatch, useSelect } from '@wordpress/data';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __, _x, sprintf } from '@wordpress/i18n';
+import { ProTeaserPanel } from '../../components/pro-teaser';
 import GalleryManager from '../../loop-sources/gallery-manager';
 import { useLoopSource } from '../../loop-sources/registry';
 import SourcePicker from '../../loop-sources/source-picker';
@@ -31,8 +32,40 @@ import {
 	useToolsPanelDropdownMenuProps,
 } from '../../utils/tools-panel';
 import { useIsPreview } from '../../utils/use-is-preview';
+import LightboxPanel from './lightbox-panel';
 import PatternSetup from './pattern-setup';
 import { applyChoices, PAGINATION_OPTIONS } from './starting-choices';
+
+// The protection Pro adds to a gallery, for an install without it.
+const PROTECTION_TEASERS = [
+	{
+		name: 'password',
+		label: __('Password Protection', 'visual-portfolio'),
+		line: __(
+			'Ask for a password before the gallery is shown.',
+			'visual-portfolio'
+		),
+		campaign: 'teaser_protection_password',
+	},
+	{
+		name: 'age',
+		label: __('Age Gate Protection', 'visual-portfolio'),
+		line: __(
+			'Ask for a date of birth before the gallery is shown.',
+			'visual-portfolio'
+		),
+		campaign: 'teaser_protection_age',
+	},
+	{
+		name: 'rightClick',
+		label: __('Right-click Protection', 'visual-portfolio'),
+		line: __(
+			'Keep visitors from saving the pictures with a right click or by dragging them.',
+			'visual-portfolio'
+		),
+		campaign: 'teaser_protection_right_click',
+	},
+];
 
 const {
 	plugin_url: pluginUrl,
@@ -74,6 +107,21 @@ const TEMPLATE = [
 		],
 	],
 	[
+		'visual-portfolio/loop-no-results',
+		{},
+		[
+			[
+				'core/paragraph',
+				{
+					content: __(
+						'No items were found matching your selection.',
+						'visual-portfolio'
+					),
+				},
+			],
+		],
+	],
+	[
 		'visual-portfolio/loop-pagination',
 		{},
 		// The `paged` variation, expressed by its inner blocks.
@@ -103,6 +151,8 @@ function useMaxPages({ attributes, setAttributes }) {
 	// and a request per preview is what kept the pattern chooser from ever
 	// reaching an idle frame - which is when it draws them.
 	const isPreview = useIsPreview();
+	const { __unstableMarkNextChangeAsNotPersistent } =
+		useDispatch(blockEditorStore);
 
 	// Read when a request resolves, so the pending value is never stale.
 	const baseQueryRef = useRef(baseQuery);
@@ -152,6 +202,9 @@ function useMaxPages({ attributes, setAttributes }) {
 						return;
 					}
 
+					// The page counts its pages itself, so bringing the preview
+					// up to date does not mark the post edited.
+					__unstableMarkNextChangeAsNotPersistent();
 					setAttributes({
 						baseQuery: {
 							...baseQueryRef.current,
@@ -169,7 +222,12 @@ function useMaxPages({ attributes, setAttributes }) {
 			cancelled = true;
 			clearTimeout(timeout);
 		};
-	}, [isPreview, query, setAttributes]);
+	}, [
+		isPreview,
+		query,
+		setAttributes,
+		__unstableMarkNextChangeAsNotPersistent,
+	]);
 }
 
 /**
@@ -483,8 +541,7 @@ function LoopPlaceholder({ attributes, setAttributes, clientId }) {
 
 	const insert = (blocks) => replaceInnerBlocks(clientId, blocks);
 
-	const startBlank = () =>
-		insert(createBlocksFromInnerBlocksTemplate(TEMPLATE));
+	const blank = () => createBlocksFromInnerBlocksTemplate(TEMPLATE);
 
 	if ('source' === step) {
 		return (
@@ -540,7 +597,10 @@ function LoopPlaceholder({ attributes, setAttributes, clientId }) {
 						>
 							{__('Continue', 'visual-portfolio')}
 						</Button>
-						<Button variant="tertiary" onClick={startBlank}>
+						<Button
+							variant="tertiary"
+							onClick={() => insert(blank())}
+						>
 							{__('Start blank', 'visual-portfolio')}
 						</Button>
 					</HStack>
@@ -583,7 +643,7 @@ function LoopPlaceholder({ attributes, setAttributes, clientId }) {
 					<ToggleControl
 						label={__('Open in a lightbox', 'visual-portfolio')}
 						help={__(
-							'A click opens the picture over the page instead of following a link.',
+							'A click on a picture opens it over the page.',
 							'visual-portfolio'
 						)}
 						checked={choices.lightbox}
@@ -615,7 +675,18 @@ function LoopPlaceholder({ attributes, setAttributes, clientId }) {
 					>
 						{__('Choose a gallery', 'visual-portfolio')}
 					</Button>
-					<Button variant="tertiary" onClick={startBlank}>
+					<Button
+						variant="tertiary"
+						onClick={() =>
+							insert(
+								applyChoices(
+									blank(),
+									choices,
+									attributes.queryType
+								)
+							)
+						}
+					>
 						{__('Start blank', 'visual-portfolio')}
 					</Button>
 				</HStack>
@@ -629,7 +700,9 @@ function LoopPlaceholder({ attributes, setAttributes, clientId }) {
 						// Named after the pattern and derived from by core, the
 						// same as a block core inserted from a pattern itself.
 						setAttributes({ metadata });
-						insert(applyChoices(blocks, choices));
+						insert(
+							applyChoices(blocks, choices, attributes.queryType)
+						);
 					}}
 					onCancel={() => setStep('pattern')}
 				/>
@@ -699,17 +772,27 @@ export default function BlockEdit(props) {
 					clientId={clientId}
 				/>
 
+				<DisplayPanel
+					attributes={attributes}
+					setAttributes={setAttributes}
+				/>
+
 				<SourceFiltersPanel
 					attributes={attributes}
 					setAttributes={setAttributes}
 					clientId={clientId}
 				/>
 
-				<DisplayPanel
+				<LightboxPanel
 					attributes={attributes}
 					setAttributes={setAttributes}
+					clientId={clientId}
 				/>
 			</InspectorControls>
+			<ProTeaserPanel
+				label={__('Protection', 'visual-portfolio')}
+				items={PROTECTION_TEASERS}
+			/>
 			<div {...innerBlocksProps} />
 		</div>
 	);

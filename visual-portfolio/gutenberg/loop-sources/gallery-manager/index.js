@@ -20,20 +20,21 @@ import {
 	MediaUploadCheck,
 } from '@wordpress/block-editor';
 import { Button } from '@wordpress/components';
-import { store as coreStore } from '@wordpress/core-data';
-import { useSelect } from '@wordpress/data';
 import { useCallback, useMemo, useRef, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { plus } from '@wordpress/icons';
+import { getProtocol, prependHTTPS } from '@wordpress/url';
 
+import { usePreviewUrls } from '../../utils/use-preview-urls';
 import GalleryImage from './gallery-image';
 import ImageSettingsModal from './image-settings-modal';
-import { mergeSelection } from './prepare-images';
-
-const { pro: isProPlugin } = window.VPGutenbergVariables;
-
-// Videos are only useful with the Pro formats behind them.
-const ALLOWED_MEDIA_TYPES = isProPlugin ? ['image', 'video'] : ['image'];
+import InsertFromUrl from './insert-from-url';
+import {
+	ALLOWED_MEDIA_TYPES,
+	getImageKey,
+	mergeSelection,
+	prepareUrlImage,
+} from './prepare-images';
 
 // The file chooser of an empty gallery takes MIME patterns rather than the
 // media types beside it, and offering fewer there than the gallery accepts is
@@ -41,69 +42,6 @@ const ALLOWED_MEDIA_TYPES = isProPlugin ? ['image', 'video'] : ['image'];
 const ACCEPTED_MIME_TYPES = ALLOWED_MEDIA_TYPES.map((type) => `${type}/*`).join(
 	','
 );
-
-/**
- * Thumbnail URL of every image, by image id.
- *
- * Images added here carry their URLs, but a gallery can also arrive from a
- * pattern or from another editor, holding nothing but attachment ids. One
- * request for the missing ones beats a request per thumbnail.
- *
- * @param {Array} images - gallery images.
- * @return {Object} image id to thumbnail URL.
- */
-function usePreviewUrls(images) {
-	const missingIds = useMemo(
-		() =>
-			images
-				.filter(
-					(image) =>
-						image.id && !image.imgThumbnailUrl && !image.imgUrl
-				)
-				.map((image) => image.id),
-		[images]
-	);
-
-	const attachments = useSelect(
-		(select) => {
-			if (!missingIds.length) {
-				return null;
-			}
-
-			return select(coreStore).getEntityRecords(
-				'postType',
-				'attachment',
-				{
-					include: missingIds,
-					per_page: missingIds.length,
-				}
-			);
-		},
-		[missingIds]
-	);
-
-	return useMemo(() => {
-		const urls = {};
-
-		images.forEach((image) => {
-			const url = image.imgThumbnailUrl || image.imgUrl;
-
-			if (url) {
-				urls[image.id] = url;
-			}
-		});
-
-		(attachments || []).forEach((attachment) => {
-			const sizes = attachment.media_details?.sizes || {};
-			const size =
-				sizes.large || sizes.medium || sizes.thumbnail || sizes.full;
-
-			urls[attachment.id] = size?.source_url || attachment.source_url;
-		});
-
-		return urls;
-	}, [images, attachments]);
-}
 
 /**
  * Spoken feedback of the drag and drop, in the user's language.
@@ -205,8 +143,14 @@ export default function GalleryManager({ images, onChange, clientId }) {
 	imagesRef.current = images;
 
 	const previewUrls = usePreviewUrls(images);
-	const ids = useMemo(() => images.map((image) => image.id), [images]);
+	const ids = useMemo(() => images.map(getImageKey), [images]);
 	const accessibility = useAccessibility(ids);
+
+	// What the media frame shows as selected: the images of the library.
+	const attachmentIds = useMemo(
+		() => images.filter((image) => image.id).map((image) => image.id),
+		[images]
+	);
 
 	const categorySuggestions = useMemo(
 		() => getUsedCategories(images),
@@ -252,8 +196,10 @@ export default function GalleryManager({ images, onChange, clientId }) {
 			return;
 		}
 
-		const from = images.findIndex((image) => image.id === active.id);
-		const to = images.findIndex((image) => image.id === over.id);
+		const from = images.findIndex(
+			(image) => getImageKey(image) === active.id
+		);
+		const to = images.findIndex((image) => getImageKey(image) === over.id);
 
 		if (-1 !== from && -1 !== to) {
 			onChange(arrayMove(images, from, to));
@@ -262,6 +208,24 @@ export default function GalleryManager({ images, onChange, clientId }) {
 
 	const onSelect = (selection) =>
 		onChange(mergeSelection(selection, imagesRef.current));
+
+	// An address the gallery already holds is not added twice: it is what
+	// tells the image apart from the others.
+	const onSelectURL = (value) => {
+		const url = prependHTTPS(value.trim());
+		const isAdded = () =>
+			imagesRef.current.some((image) => image.imgUrl === url);
+
+		if (!/^https?:$/.test(getProtocol(url) || '') || isAdded()) {
+			return;
+		}
+
+		prepareUrlImage(url).then((image) => {
+			if (!isAdded()) {
+				onChange([...imagesRef.current, image]);
+			}
+		});
+	};
 
 	if (!images.length) {
 		return (
@@ -279,6 +243,7 @@ export default function GalleryManager({ images, onChange, clientId }) {
 					allowedTypes={ALLOWED_MEDIA_TYPES}
 					multiple
 					onSelect={onSelect}
+					onSelectURL={onSelectURL}
 				/>
 			</MediaUploadCheck>
 		);
@@ -298,32 +263,38 @@ export default function GalleryManager({ images, onChange, clientId }) {
 					<div className="vpf-gallery-manager__grid">
 						{images.map((image, index) => (
 							<GalleryImage
-								key={image.id}
+								key={getImageKey(image)}
 								image={image}
 								index={index}
-								previewUrl={previewUrls[image.id]}
+								previewUrl={previewUrls[getImageKey(image)]}
 								onEdit={setEditingIndex}
 								onRemove={removeImage}
 							/>
 						))}
 
-						<MediaUploadCheck>
-							<MediaUpload
-								multiple="add"
-								allowedTypes={ALLOWED_MEDIA_TYPES}
-								value={ids}
-								onSelect={onSelect}
-								render={({ open }) => (
-									<Button
-										className="vpf-gallery-manager__add"
-										icon={plus}
-										onClick={open}
-									>
-										{__('Add media', 'visual-portfolio')}
-									</Button>
-								)}
-							/>
-						</MediaUploadCheck>
+						<div className="vpf-gallery-manager__actions">
+							<MediaUploadCheck>
+								<MediaUpload
+									multiple="add"
+									allowedTypes={ALLOWED_MEDIA_TYPES}
+									value={attachmentIds}
+									onSelect={onSelect}
+									render={({ open }) => (
+										<Button
+											className="vpf-gallery-manager__add vpf-component-media-picker-button"
+											icon={plus}
+											onClick={open}
+										>
+											{__(
+												'Add media',
+												'visual-portfolio'
+											)}
+										</Button>
+									)}
+								/>
+							</MediaUploadCheck>
+							<InsertFromUrl onSelectURL={onSelectURL} />
+						</div>
 					</div>
 				</SortableContext>
 			</DndContext>
@@ -346,7 +317,7 @@ export default function GalleryManager({ images, onChange, clientId }) {
 					image={editing}
 					index={editingIndex}
 					total={images.length}
-					previewUrl={previewUrls[editing.id]}
+					previewUrl={previewUrls[getImageKey(editing)]}
 					categorySuggestions={categorySuggestions}
 					allowedTypes={ALLOWED_MEDIA_TYPES}
 					clientId={clientId}

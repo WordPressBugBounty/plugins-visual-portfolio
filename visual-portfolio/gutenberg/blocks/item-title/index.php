@@ -50,7 +50,11 @@ class Visual_Portfolio_Block_Item_Title {
 	private function get_click_wrapper( $title, $attributes, $context ) {
 		// A title saved before the click action existed keeps meaning what its
 		// link toggle said - only an unset action falls back to it.
-		$action = $attributes['clickAction'] ?? ( empty( $attributes['isLink'] ) ? 'none' : 'url' );
+		list( $action, $extension ) = Visual_Portfolio_Popup::resolve_click_action( $attributes['clickAction'] ?? ( empty( $attributes['isLink'] ) ? 'none' : 'url' ), $context );
+
+		if ( $extension ) {
+			return sprintf( '<a%1$s>%2$s</a>', Visual_Portfolio_Popup::get_attributes_html( $extension ), $title );
+		}
 
 		if ( 'url' === $action && ! empty( $context['vp/itemUrl'] ) ) {
 			return sprintf(
@@ -68,16 +72,9 @@ class Visual_Portfolio_Block_Item_Title {
 
 		$trigger = Visual_Portfolio_Popup::get_trigger_attributes( $context );
 
-		// An item the lightbox has nothing to show - a Pro source that refused
-		// it, an image that no longer exists - is not made clickable.
-		if ( empty( $trigger ) ) {
-			return $title;
-		}
-
 		return sprintf(
-			'<a href="%1$s" data-vp-popup="%2$s">%3$s</a>',
+			'<a href="%1$s" data-vp-popup>%2$s</a>',
 			esc_url( $trigger['href'] ),
-			esc_attr( $trigger['data-vp-popup'] ),
 			$title
 		);
 	}

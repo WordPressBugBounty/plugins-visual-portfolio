@@ -100,27 +100,46 @@ class Visual_Portfolio_Block_Loop_Filter_Item {
 			return '';
 		}
 
-		$query_id = Visual_Portfolio_Block_Loop::get_query_id( $block->context );
-
-		$filter_link = Visual_Portfolio_Block_Loop::add_random_seed(
-			Visual_Portfolio_Get::get_pagenum_link(
-				array(
-					'vp_filter' => $filter_value,
-					'vp_page'   => 1,
-				),
-				$query_id
+		$filter_link = Visual_Portfolio_Block_Loop::get_link(
+			array(
+				'vp_filter' => $filter_value,
+				'vp_page'   => 1,
 			),
 			$block->context
 		);
 
 		// Determine if this item should be active.
-		$current_filter = Visual_Portfolio_Get::get_filter_active_item( array(), $query_id );
+		$current_filter = Visual_Portfolio_Block_Loop::get_active_filter( $block->context );
 
 		if ( $is_all ) {
 			// The "All" item is active only when no filter is set in the URL.
 			$is_active = ! $current_filter;
 		} else {
 			$is_active = $current_filter && rawurldecode( $filter_value ) === $current_filter;
+		}
+
+		// In a filter shown as a dropdown the item is one of its options, which
+		// hold text alone, so the styles of the item have nothing to apply to.
+		if ( ! empty( $block->context['vp/displayAsDropdown'] ) ) {
+			$label = wp_strip_all_tags( $text );
+
+			if ( $show_count && ! $is_all && $count > 0 ) {
+				$label = sprintf(
+					// translators: 1: category name, 2: number of items in it.
+					__( '%1$s (%2$s)', 'visual-portfolio' ),
+					$label,
+					number_format_i18n( $count )
+				);
+			}
+
+			// The value is what the form submits without JavaScript.
+			return sprintf(
+				'<option data-vp-url="%1$s" value="%2$s"%3$s>%4$s</option>',
+				esc_url( $filter_link ),
+				esc_attr( rawurldecode( $filter_value ) ),
+				selected( $is_active, true, false ),
+				esc_html( $label )
+			);
 		}
 
 		// Get block wrapper attributes but override the class completely.

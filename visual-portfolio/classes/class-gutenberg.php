@@ -45,7 +45,9 @@ class Visual_Portfolio_Gutenberg {
 		register_block_pattern_category(
 			'visual-portfolio',
 			array(
-				'label' => __( 'Visual Portfolio', 'visual-portfolio' ),
+				// Read on `init`, after Pro's white label renamed the plugin.
+				// The name is escaped for HTML, the label is printed as text.
+				'label' => wp_specialchars_decode( visual_portfolio()->plugin_name, ENT_QUOTES ),
 			)
 		);
 
@@ -261,6 +263,26 @@ class Visual_Portfolio_Gutenberg {
 	}
 
 	/**
+	 * Whether the site's language reads right to left.
+	 *
+	 * The front end speaks the site's language and the editor the user's, and
+	 * `is_rtl()` answers for whichever is loaded: an Arabic profile on an
+	 * English site read as RTL. The editor asks about the page it previews.
+	 *
+	 * @return bool
+	 */
+	public static function is_site_rtl() {
+		$switched = switch_to_locale( get_locale() );
+		$rtl      = is_rtl();
+
+		if ( $switched ) {
+			restore_previous_locale();
+		}
+
+		return $rtl;
+	}
+
+	/**
 	 * Sort options the Gallery Sort block offers in the editor.
 	 *
 	 * An ordered list rather than a slug-keyed map: the default sorting has an
@@ -321,25 +343,14 @@ class Visual_Portfolio_Gutenberg {
 
 		$attributes = self::get_block_attributes();
 
-		$gutenberg_script_dependencies = array( 'masonry' );
-		$editor_vendor_path            = 'build/gutenberg/editor-vendor';
-
-		// Webpack may split heavy editor vendors into a separate chunk.
-		if ( file_exists( visual_portfolio()->plugin_path . $editor_vendor_path . '.js' ) ) {
-			Visual_Portfolio_Assets::enqueue_script(
-				'visual-portfolio-gutenberg-editor-vendor',
-				$editor_vendor_path
-			);
-
-			$gutenberg_script_dependencies[] = 'visual-portfolio-gutenberg-editor-vendor';
-		}
-
-		// Block.
+		// Block. The code editor control loads Ace as a webpack chunk of its own
+		// when it first renders, so no vendor script is enqueued here.
 		Visual_Portfolio_Assets::enqueue_script(
 			'visual-portfolio-gutenberg',
 			'build/gutenberg/index',
-			$gutenberg_script_dependencies
+			array( 'masonry' )
 		);
+		wp_set_script_translations( 'visual-portfolio-gutenberg', 'visual-portfolio', visual_portfolio()->plugin_path . 'languages' );
 
 		// Asking for the sort options fires `vpf_loop_sort_options`, and the
 		// block that reads them ships with the Gallery Loop family.
@@ -361,6 +372,8 @@ class Visual_Portfolio_Gutenberg {
 				'pro'                      => visual_portfolio()->is_pro(),
 				'loop_blocks'              => $loop_blocks,
 				'loop_sort_options'        => $loop_blocks ? self::get_loop_sort_options() : array(),
+				'loop_source_supports'     => $loop_blocks ? Visual_Portfolio_Get::get_loop_source_supports() : array(),
+				'site_rtl'                 => $loop_blocks && self::is_site_rtl(),
 				'admin_url'                => get_admin_url(),
 				'attributes'               => $attributes,
 				'controls'                 => Visual_Portfolio_Controls::get_registered_array(),
@@ -375,6 +388,7 @@ class Visual_Portfolio_Gutenberg {
 			'visual-portfolio-gutenberg-custom-post-meta',
 			'build/gutenberg/custom-post-meta'
 		);
+		wp_set_script_translations( 'visual-portfolio-gutenberg-custom-post-meta', 'visual-portfolio', visual_portfolio()->plugin_path . 'languages' );
 
 		wp_localize_script(
 			'visual-portfolio-gutenberg-custom-post-meta',

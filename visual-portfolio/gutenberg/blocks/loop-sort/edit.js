@@ -6,16 +6,19 @@ import {
 	CheckboxControl,
 	Disabled,
 	TextControl,
+	ToggleControl,
 	__experimentalToolsPanel as ToolsPanel,
 	__experimentalToolsPanelItem as ToolsPanelItem,
 	__experimentalVStack as VStack,
 } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
+import classnames from 'classnames/dedupe';
 
 /**
  * Internal dependencies
  */
 import { useLoopOrphanWarning } from '../../utils/loop-orphan-warning';
+import { loopSourceSupports } from '../../utils/loop-source-supports';
 import {
 	getResetAllValues,
 	useToolsPanelDropdownMenuProps,
@@ -44,14 +47,23 @@ function getShownOptions(selected, labels) {
 	}));
 }
 
-export default function LoopSortEdit({ attributes, setAttributes, context }) {
+export default function LoopSortEdit({
+	attributes,
+	setAttributes,
+	context,
+	__unstableLayoutClassNames: layoutClassNames,
+}) {
 	const dropdownMenuProps = useToolsPanelDropdownMenuProps();
 
-	const { options = [], labels = {} } = attributes;
+	const { options = [], labels = {}, displayAsDropdown } = attributes;
 
 	useLoopOrphanWarning('visual-portfolio/loop-sort', context);
 
 	const shown = getShownOptions(options, labels);
+	const isUnsupported = !loopSourceSupports(
+		context?.['vp/queryType'],
+		'sort'
+	);
 
 	function toggleOption(value, isChecked) {
 		// An empty selection stands for all of them, so the first change has to
@@ -99,6 +111,7 @@ export default function LoopSortEdit({ attributes, setAttributes, context }) {
 					resetAll={(filters) =>
 						setAttributes(
 							getResetAllValues(filters, {
+								displayAsDropdown: true,
 								options: [],
 								labels: {},
 							})
@@ -106,6 +119,35 @@ export default function LoopSortEdit({ attributes, setAttributes, context }) {
 					}
 					dropdownMenuProps={dropdownMenuProps}
 				>
+					{isUnsupported && (
+						<p style={{ gridColumn: '1 / -1', margin: 0 }}>
+							{__(
+								'Sorting is not available for this source, so the page shows no sort control.',
+								'visual-portfolio'
+							)}
+						</p>
+					)}
+					<ToolsPanelItem
+						label={__('Display as dropdown', 'visual-portfolio')}
+						isShownByDefault
+						hasValue={() => !displayAsDropdown}
+						onDeselect={() =>
+							setAttributes({ displayAsDropdown: true })
+						}
+					>
+						<ToggleControl
+							label={__(
+								'Display as dropdown',
+								'visual-portfolio'
+							)}
+							checked={displayAsDropdown}
+							onChange={() =>
+								setAttributes({
+									displayAsDropdown: !displayAsDropdown,
+								})
+							}
+						/>
+					</ToolsPanelItem>
 					<ToolsPanelItem
 						label={__('Sort Options', 'visual-portfolio')}
 						isShownByDefault
@@ -160,16 +202,57 @@ export default function LoopSortEdit({ attributes, setAttributes, context }) {
 					</ToolsPanelItem>
 				</ToolsPanel>
 			</InspectorControls>
-			<div {...useBlockProps({ className: 'vp-block-loop-sort' })}>
-				<Disabled>
-					<select>
-						{shown.map(({ value, label }) => (
-							<option key={value || 'default'} value={value}>
+			<div
+				{...useBlockProps({
+					// Only a block that holds inner blocks is given its layout
+					// classes by the editor.
+					className: classnames(
+						'vp-block-loop-sort',
+						layoutClassNames
+					),
+				})}
+			>
+				{displayAsDropdown ? (
+					<Disabled>
+						{/* The default order is selected, as on the page, and
+						 without it the page asks for an order. */}
+						<select value="" readOnly>
+							{!shown.some(({ value }) => !value) && (
+								<option value="" disabled>
+									{__('Select sorting', 'visual-portfolio')}
+								</option>
+							)}
+							{shown.map(({ value, label }) => (
+								<option key={value || 'default'} value={value}>
+									{label}
+								</option>
+							))}
+						</select>
+					</Disabled>
+				) : (
+					// The editor has no sort in its URL, which is the state the
+					// render callback marks the default order active in.
+					shown.map(({ value, label }) =>
+						value ? (
+							<a
+								key={value}
+								href="#sort-pseudo-link"
+								className="vp-block-loop-sort__item"
+								onClick={(event) => event.preventDefault()}
+							>
 								{label}
-							</option>
-						))}
-					</select>
-				</Disabled>
+							</a>
+						) : (
+							<span
+								key="default"
+								aria-current="page"
+								className="vp-block-loop-sort__item is-active"
+							>
+								{label}
+							</span>
+						)
+					)
+				)}
 			</div>
 		</>
 	);

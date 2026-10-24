@@ -16,30 +16,34 @@ if ( ! defined( 'ABSPATH' ) ) {
  * what lets these blocks put the value on a custom property of their own. This
  * is the conversion core's layout support performs, in one place: the unsafe
  * characters are the ones `wp_sanitize_block_gap_value()` refuses, and a preset
- * becomes the variable the theme declared it under. The axial form is the one
- * `__experimentalGetGapCSSValue()` produces on the editor side.
+ * becomes the variable the theme declared it under.
  *
- * @param mixed $gap - `style.spacing.blockGap` of a block.
+ * One length per axis. The layouts work their track widths out inside `calc()`,
+ * where a two-value shorthand is not a length, so each axis is asked for on its
+ * own: `left` is the gap between columns, `top` the gap between rows. A plain
+ * string is the value of both.
+ *
+ * @param mixed  $gap  - `style.spacing.blockGap` of a block.
+ * @param string $axis - `left` or `top`.
  *
  * @return string CSS length, or an empty string when the theme decides.
  */
-function visual_portfolio_get_block_gap( $gap ) {
+function visual_portfolio_get_block_gap( $gap, $axis = 'left' ) {
 	$gap = wp_sanitize_block_gap_value( $gap );
 
-	// Two axes, and the shorthand takes the row gap before the column gap.
 	if ( is_array( $gap ) ) {
-		$row    = visual_portfolio_get_block_gap( $gap['top'] ?? '' );
-		$column = visual_portfolio_get_block_gap( $gap['left'] ?? '' );
-
-		if ( '' === $row || '' === $column ) {
-			return '' === $row ? $column : $row;
-		}
-
-		return $row === $column ? $row : $row . ' ' . $column;
+		return visual_portfolio_get_block_gap( $gap[ $axis ] ?? '' );
 	}
 
 	if ( ! is_string( $gap ) || '' === $gap ) {
 		return '';
+	}
+
+	// None is a bare zero, and a bare zero is a number: inside a `calc()` a
+	// number cannot be taken from a length, so every slide width the layouts
+	// work out from the gap came out invalid. A zero with a unit is a length.
+	if ( preg_match( '/^0(\.0+)?$/', $gap ) ) {
+		return '0px';
 	}
 
 	// `var:preset|spacing|50` is how a preset travels in block attributes.

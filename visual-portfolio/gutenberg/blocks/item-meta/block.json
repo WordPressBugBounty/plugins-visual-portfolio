@@ -16,8 +16,7 @@
 	"attributes": {
 		"metaType": {
 			"type": "string",
-			"default": "comments",
-			"enum": ["comments", "views", "reading-time"]
+			"default": "comments"
 		},
 		"showIcon": {
 			"type": "boolean",
@@ -41,6 +40,10 @@
 			"type": "boolean",
 			"default": false,
 			"role": "content"
+		},
+		"extensions": {
+			"type": "object",
+			"default": {}
 		}
 	},
 	"example": {

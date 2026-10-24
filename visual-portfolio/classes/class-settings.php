@@ -226,7 +226,174 @@ class Visual_Portfolio_Settings {
 			),
 		);
 
+		if ( ! visual_portfolio()->is_pro() ) {
+			$preview = self::get_pro_settings_preview();
+
+			foreach ( $sections as $i => $section ) {
+				if ( isset( $preview[ $section['id'] ] ) ) {
+					$sections[ $i ]['callback'] = array( __CLASS__, 'print_pro_settings_preview_note' );
+				}
+			}
+		}
+
 		return apply_filters( 'vpf_settings_sections', $sections );
+	}
+
+	/**
+	 * The tabs Pro adds to Settings, for an install without Pro: one line on
+	 * what the tab does, and the tab as Pro first shows it, greyed out.
+	 *
+	 * The fields mirror the ones Pro registers for these tabs (modules/watermarks,
+	 * modules/socials, modules/white-label in Visual Portfolio Pro): the same
+	 * names, labels, field types and markup, in the state Pro shows before
+	 * anything is set up. Pro hides the rest of each tab until then, so it is
+	 * left out here too. Pro's definitions live in Pro's own code, which is not
+	 * there to read without Pro, so a change to those fields in Pro is
+	 * repeated here.
+	 *
+	 * @return array
+	 */
+	public static function get_pro_settings_preview() {
+		// Pro's networks, in Pro's order; the icons are copies of Pro's.
+		$networks = array(
+			'instagram' => esc_html__( 'Instagram', 'visual-portfolio' ),
+			'youtube'   => esc_html__( 'YouTube', 'visual-portfolio' ),
+			'vimeo'     => esc_html__( 'Vimeo', 'visual-portfolio' ),
+			'unsplash'  => esc_html__( 'Unsplash', 'visual-portfolio' ),
+			'x'         => esc_html__( 'X', 'visual-portfolio' ),
+			'flickr'    => esc_html__( 'Flickr', 'visual-portfolio' ),
+			'dribbble'  => esc_html__( 'Dribbble', 'visual-portfolio' ),
+			'twitch'    => esc_html__( 'Twitch', 'visual-portfolio' ),
+			'vk'        => esc_html__( 'VK', 'visual-portfolio' ),
+			'rss'       => esc_html__( 'RSS', 'visual-portfolio' ),
+		);
+		$tiles    = '';
+
+		foreach ( $networks as $name => $label ) {
+			$tiles .= '<button type="button"' . ( 'instagram' === $name ? ' class="vpf-settings-pro-preview-network-active"' : '' ) . '>'
+				. '<img src="' . esc_url( visual_portfolio()->plugin_url . 'assets/admin/images/social/' . $name . '.svg' ) . '" width="20" height="20" alt="" />'
+				. '<span>' . $label . '</span>'
+				. '</button>';
+		}
+
+		// Pro opens the first network, with no account connected.
+		$social = '<div class="vpf-settings-pro-preview-networks">' . $tiles . '</div>'
+			. '<div class="vpf-settings-pro-preview-network">'
+			. '<h3>' . $networks['instagram'] . '</h3>'
+			. '<button type="button" class="button button-small">' . esc_html__( '+ Connect', 'visual-portfolio' ) . '</button>'
+			. '</div>'
+			. '<div class="postbox"><div class="inside">' . esc_html__( 'No accounts connected yet.', 'visual-portfolio' ) . '</div></div>';
+
+		$preview = array(
+			'vp_watermarks'          => array(
+				'line'     => __( 'Protect your works using watermarks', 'visual-portfolio' ),
+				'campaign' => 'watermarks',
+				'fields'   => array(
+					array(
+						'name' => 'watermark_info',
+						'type' => 'html',
+						'desc' => '<p>' . esc_html__( 'Add your logo as a watermark on top of your images to make them recognizable and harder to steal.', 'visual-portfolio' ) . '</p>'
+							. '<p>' . esc_html__( 'All your media library images will not be touched, we place watermarked images in another safe place and use them only on demand.', 'visual-portfolio' ) . '</p>',
+					),
+					array(
+						'name' => 'watermark',
+						'type' => 'html',
+						'desc' => '<button type="button" class="button">' . esc_html__( 'Add Watermark', 'visual-portfolio' ) . '</button>',
+					),
+				),
+			),
+			'vp_social_integrations' => array(
+				'line'     => __( 'Social feeds such as Instagram, Youtube, Flickr, X, etc...', 'visual-portfolio' ),
+				'campaign' => 'social_feeds',
+				'fields'   => array(
+					array(
+						'name' => 'vpf-pro-social-settings',
+						'type' => 'html',
+						'desc' => $social,
+					),
+				),
+			),
+			'vp_white_label'         => array(
+				'line'     => __( 'Remove our plugin brand and logos from Front and Admin areas', 'visual-portfolio' ),
+				'campaign' => 'white_label',
+				'fields'   => array(
+					array(
+						'name'  => 'enable',
+						'label' => esc_html__( 'Enable White Label', 'visual-portfolio' ),
+						'type'  => 'toggle',
+						'desc'  => esc_html__( 'Change the plugin name and logos to your brand.', 'visual-portfolio' ),
+					),
+				),
+			),
+		);
+
+		// Locked like the Pro rows of other tabs, without their per-row mark:
+		// the line above the tab already says it. Pro prints its html fields
+		// without the description wrapper, so these do too.
+		foreach ( $preview as $section => $data ) {
+			foreach ( $data['fields'] as $i => $field ) {
+				$preview[ $section ]['fields'][ $i ]['class'] = $field['name'] . ' vpf-settings-control-pro vpf-settings-pro-preview';
+
+				if ( 'html' === $field['type'] ) {
+					$preview[ $section ]['fields'][ $i ]['callback'] = array( __CLASS__, 'print_pro_settings_preview_html' );
+				}
+			}
+		}
+
+		return $preview;
+	}
+
+	/**
+	 * A Pro tab's html field, as Pro prints it.
+	 *
+	 * @param array $args - the settings field args.
+	 *
+	 * @return void
+	 */
+	public static function print_pro_settings_preview_html( $args ) {
+		echo wp_kses_post( $args['desc'] );
+	}
+
+	/**
+	 * The line above a Pro tab's greyed-out fields, with the link to Pro.
+	 *
+	 * @param array $section - the settings section.
+	 *
+	 * @return void
+	 */
+	public static function print_pro_settings_preview_note( $section ) {
+		$preview = self::get_pro_settings_preview();
+
+		if ( ! isset( $preview[ $section['id'] ] ) ) {
+			return;
+		}
+
+		$preview = $preview[ $section['id'] ];
+		$url     = Visual_Portfolio_Admin::get_plugin_site_url(
+			array(
+				'utm_medium'   => 'settings_page',
+				'utm_campaign' => $preview['campaign'],
+			)
+		);
+		?>
+		<div class="vpf-settings-pro-note">
+			<svg class="vpf-settings-pro-note-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M17 10h-1.2V7c0-2.1-1.7-3.8-3.8-3.8-2.1 0-3.8 1.7-3.8 3.8v3H7c-.6 0-1 .4-1 1v8c0 .6.4 1 1 1h10c.6 0 1-.4 1-1v-8c0-.6-.4-1-1-1zm-2.8 0H9.8V7c0-1.2 1-2.2 2.2-2.2s2.2 1 2.2 2.2v3z" fill="currentColor"/></svg>
+			<p>
+				<?php
+				printf(
+					/* translators: %s: name of a settings tab, such as "White Label". */
+					esc_html__( '%s comes with Visual Portfolio Pro.', 'visual-portfolio' ),
+					'<strong>' . esc_html( $section['title'] ) . '</strong>'
+				);
+				echo ' ' . esc_html( $preview['line'] );
+				?>
+			</p>
+			<a class="button button-primary" href="<?php echo esc_url( $url ); ?>" target="_blank" rel="noopener noreferrer">
+				<?php echo esc_html__( 'Go Pro', 'visual-portfolio' ); ?>
+				<span class="screen-reader-text"><?php echo esc_html__( '(opens in a new tab)', 'visual-portfolio' ); ?></span>
+			</a>
+		</div>
+		<?php
 	}
 
 	/**
@@ -240,26 +407,6 @@ class Visual_Portfolio_Settings {
 		}
 
 		$default_breakpoints = Visual_Portfolio_Breakpoints::get_default_breakpoints();
-		$go_pro_links        = array(
-			'watermarks'  => Visual_Portfolio_Admin::get_plugin_site_url(
-				array(
-					'utm_medium'   => 'settings_page',
-					'utm_campaign' => 'watermarks',
-				)
-			),
-			'social'      => Visual_Portfolio_Admin::get_plugin_site_url(
-				array(
-					'utm_medium'   => 'settings_page',
-					'utm_campaign' => 'social_feeds',
-				)
-			),
-			'white_label' => Visual_Portfolio_Admin::get_plugin_site_url(
-				array(
-					'utm_medium'   => 'settings_page',
-					'utm_campaign' => 'white_label',
-				)
-			),
-		);
 
 		$settings_fields = array(
 			'vp_general' => array(
@@ -791,52 +938,14 @@ class Visual_Portfolio_Settings {
 					'default' => '#1e1e1e',
 				),
 			),
-			'vp_watermarks' => array(
-				array(
-					'name'    => 'pro_info',
-					'desc'    => '
-                        <div class="vpf-pro-note vpf-settings-info-pro">
-                            <h3>' . esc_html__( 'Premium Only', 'visual-portfolio' ) . '</h3>
-                            <div>
-                                <p class="vpf-pro-note-description">' . esc_html__( 'Protect your works using watermarks', 'visual-portfolio' ) . '</p>
-                                <a class="vpf-pro-note-button" target="_blank" rel="noopener noreferrer" href="' . esc_url( $go_pro_links['watermarks'] ) . '">' . esc_html__( 'Go Pro', 'visual-portfolio' ) . '</a>
-                            </div>
-                        </div>
-                    ',
-					'type'    => 'html',
-				),
-			),
-			'vp_social_integrations' => array(
-				array(
-					'name'    => 'pro_info',
-					'desc'    => '
-                        <div class="vpf-pro-note vpf-settings-info-pro">
-                            <h3>' . esc_html__( 'Premium Only', 'visual-portfolio' ) . '</h3>
-                            <div>
-                                <p class="vpf-pro-note-description">' . esc_html__( 'Social feeds such as Instagram, Youtube, Flickr, X, etc...', 'visual-portfolio' ) . '</p>
-                                <a class="vpf-pro-note-button" target="_blank" rel="noopener noreferrer" href="' . esc_url( $go_pro_links['social'] ) . '">' . esc_html__( 'Go Pro', 'visual-portfolio' ) . '</a>
-                            </div>
-                        </div>
-                    ',
-					'type'    => 'html',
-				),
-			),
-			'vp_white_label' => array(
-				array(
-					'name'    => 'pro_info',
-					'desc'    => '
-                        <div class="vpf-pro-note">
-                            <h3>' . esc_html__( 'Premium Only', 'visual-portfolio' ) . '</h3>
-                            <div>
-                                <p class="vpf-pro-note-description">' . esc_html__( 'Remove our plugin brand and logos from Front and Admin areas', 'visual-portfolio' ) . '</p>
-                                <a class="vpf-pro-note-button" target="_blank" rel="noopener noreferrer" href="' . esc_url( $go_pro_links['white_label'] ) . '">' . esc_html__( 'Go Pro', 'visual-portfolio' ) . '</a>
-                            </div>
-                        </div>
-                    ',
-					'type'    => 'html',
-				),
-			),
 		);
+
+		// Pro registers these tabs' fields itself.
+		if ( ! visual_portfolio()->is_pro() ) {
+			foreach ( self::get_pro_settings_preview() as $section => $preview ) {
+				$settings_fields[ $section ] = $preview['fields'];
+			}
+		}
 
 		self::$cached_settings_fields = apply_filters( 'vpf_settings_fields', $settings_fields );
 
@@ -879,6 +988,9 @@ class Visual_Portfolio_Settings {
 				<?php if ( ! class_exists( 'Visual_Portfolio_Pro' ) ) : ?>
 					// disable pro inputs.
 					$('.vpf-settings-control-pro').find('input, textarea').attr('disabled', 'disabled');
+
+					// A Pro tab's preview keeps Pro's buttons, which only look the part.
+					$('.vpf-settings-pro-preview').attr('inert', '');
 				<?php endif; ?>
 			})(jQuery);
 		</script>
@@ -912,7 +1024,7 @@ class Visual_Portfolio_Settings {
 	 * @return void
 	 */
 	public static function get_posts_ajax_callback() {
-		if ( isset( $_REQUEST['nonce'] ) && wp_verify_nonce( sanitize_key( $_REQUEST['nonce'] ), 'vp-ajax-nonce' ) ) {
+		if ( isset( $_REQUEST['nonce'] ) && wp_verify_nonce( sanitize_key( $_REQUEST['nonce'] ), 'vp-ajax-nonce' ) && current_user_can( 'manage_options' ) ) {
 			$return     = array();
 			$query_opts = array(
 				'post_status'            => 'publish',
@@ -940,7 +1052,7 @@ class Visual_Portfolio_Settings {
 			echo wp_json_encode( $return );
 		}
 
-		die;
+		wp_die();
 	}
 }
 

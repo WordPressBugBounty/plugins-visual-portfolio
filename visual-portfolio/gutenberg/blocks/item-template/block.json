@@ -22,6 +22,14 @@
 			"type": "number",
 			"default": 3
 		},
+		"layoutColumnCountTablet": {
+			"type": "number",
+			"default": 0
+		},
+		"layoutColumnCountMobile": {
+			"type": "number",
+			"default": 0
+		},
 		"layoutMinimumColumnWidth": {
 			"type": "string",
 			"default": "16rem"
@@ -33,6 +41,18 @@
 		"layoutTiles": {
 			"type": "string",
 			"default": "3|1,1|"
+		},
+		"layoutTilesTablet": {
+			"type": "string",
+			"default": ""
+		},
+		"layoutTilesMobile": {
+			"type": "string",
+			"default": ""
+		},
+		"verticalAlignment": {
+			"type": "string",
+			"enum": ["top", "center", "bottom"]
 		},
 		"justifiedRowHeight": {
 			"type": "number",
@@ -66,8 +86,7 @@
 		},
 		"carouselEffect": {
 			"type": "string",
-			"default": "none",
-			"enum": ["none", "coverflow", "slideshow"]
+			"default": "none"
 		},
 		"carouselRepeat": {
 			"type": "boolean",
@@ -89,14 +108,30 @@
 			"type": "boolean",
 			"default": false
 		},
-		"carouselShowArrows": {
-			"type": "boolean",
-			"default": true
-		},
-		"carouselIndicator": {
+		"carouselContainer": {
 			"type": "string",
 			"default": "none",
-			"enum": ["none", "dots", "progress"]
+			"enum": ["none", "content", "wide", "custom"]
+		},
+		"carouselContainerWidth": {
+			"type": "string",
+			"default": "1200px"
+		},
+		"carouselSlideHeight": {
+			"type": "string",
+			"default": ""
+		},
+		"carouselStretchSlides": {
+			"type": "boolean",
+			"default": false
+		},
+		"carouselSlidesPerGroup": {
+			"type": "number",
+			"default": 1
+		},
+		"extensions": {
+			"type": "object",
+			"default": {}
 		}
 	},
 	"supports": {
@@ -127,7 +162,7 @@
 		"spacing": {
 			"padding": true,
 			"margin": ["top", "bottom"],
-			"blockGap": true,
+			"blockGap": ["horizontal", "vertical"],
 			"__experimentalDefaultControls": {
 				"blockGap": true
 			}
@@ -147,7 +182,8 @@
 		"vp/postsQuery",
 		"vp/imagesQuery",
 		"vp/sourceQuery",
-		"vp/blockId"
+		"vp/blockId",
+		"vp/lightbox"
 	],
 	"providesContext": {
 		"vp/layoutType": "layoutType",

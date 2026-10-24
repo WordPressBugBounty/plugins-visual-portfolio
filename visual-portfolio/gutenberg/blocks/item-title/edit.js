@@ -19,16 +19,12 @@ import {
 import { createInterpolateElement } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';
 import { __ } from '@wordpress/i18n';
+import { followsLink, getClickActions } from '../../utils/click-actions';
 import {
 	getResetAllValues,
 	useToolsPanelDropdownMenuProps,
 } from '../../utils/tools-panel';
-
-const CLICK_ACTION_OPTIONS = [
-	{ label: __('None', 'visual-portfolio'), value: 'none' },
-	{ label: __('Open the item', 'visual-portfolio'), value: 'url' },
-	{ label: __('Open the lightbox', 'visual-portfolio'), value: 'popup' },
-];
+import { useIsPreview } from '../../utils/use-is-preview';
 
 export default function ItemTitleEdit({
 	attributes,
@@ -48,9 +44,19 @@ export default function ItemTitleEdit({
 	const blockProps = useBlockProps();
 	const blockEditingMode = useBlockEditingMode();
 
+	// The placeholder stands in on the item being edited and nowhere else:
+	// the read-only copies of the item, and every other preview, show what
+	// the page will show - and an item without a title shows nothing.
+	const isPreview = useIsPreview();
 	const title = itemTitle
 		? decodeEntities(itemTitle)
-		: __('Gallery item title', 'visual-portfolio');
+		: isPreview
+			? ''
+			: __('Gallery item title', 'visual-portfolio');
+
+	if (!title) {
+		return null;
+	}
 
 	return (
 		<>
@@ -91,13 +97,13 @@ export default function ItemTitleEdit({
 								<SelectControl
 									label={__('On click', 'visual-portfolio')}
 									value={clickAction}
-									options={CLICK_ACTION_OPTIONS}
+									options={getClickActions()}
 									onChange={(value) =>
 										setAttributes({ clickAction: value })
 									}
 								/>
 							</ToolsPanelItem>
-							{'url' === clickAction && (
+							{followsLink(clickAction) && (
 								<>
 									<ToolsPanelItem
 										label={__(

@@ -16,7 +16,8 @@ import { syncColumns } from '../item-template/auto-columns';
  * loop still navigates by full page loads. It only replaces the load with a
  * region swap, and hands the navigation back to the browser whenever it cannot.
  *
- * Pro composes onto the same namespace with another `store()` call.
+ * Pro composes onto the same namespace with another `store()` call, and adds
+ * `actions.search` there. Free never defines it, so the two cannot collide.
  */
 
 const LOOP_SELECTOR = '.vp-block-loop';
@@ -24,7 +25,11 @@ const LIST_SELECTOR = '.wp-block-visual-portfolio-item-template';
 const ITEM_SELECTOR = '.wp-block-visual-portfolio-item-template__item';
 const PAGINATION_SELECTOR = '.vp-block-loop-pagination';
 const TRIGGER_SELECTOR = '.vp-block-loop-pagination-trigger';
+const END_SELECTOR = '.vp-block-loop-pagination-end';
 const MASONRY_CLASS = 'vp-layout-masonry';
+const RANGE_SELECTOR = '.vp-block-loop-query-total[data-vp-range-text]';
+const THUMBS_SELECTOR = '.vp-block-loop-carousel-thumbnails';
+const THUMB_SELECTOR = '.vp-block-loop-carousel-thumb';
 
 // Written on the list once Masonry is positioning the items, and read by the
 // stylesheet: until then the browser packs them into columns on its own. Not
@@ -47,18 +52,35 @@ const NAVIGATION_TIMEOUT = 10000;
 // Listened for by the item template module, which owns justified and carousel.
 const RELAYOUT_EVENT = 'vp-relayout';
 
+// Sent by an infinite trigger before a load it starts by itself; an extension
+// that cancels it keeps the trigger a Load More until it is asked again.
+const INFINITE_LOAD_EVENT = 'vp-infinite-load';
+
+// Sent on a loop right before it loads an address, so that an extension holding
+// the page already can answer with it; see `requestPage()`.
+const REQUEST_EVENT = 'vp-loop-request';
+
+// Sent on a loop once it shows what it loaded.
+const LOADED_EVENT = 'vp-loop-loaded';
+
 const masonryLayouts = new WeakMap();
 const autoColumns = new WeakMap();
 const resizeObservers = new WeakMap();
 const observedWidths = new WeakMap();
 const pendingRequests = new WeakMap();
 const loopUndos = new WeakMap();
+const loopUndoAddresses = new WeakMap();
+// Per infinite trigger, what makes its observer report where the trigger is now.
+const infiniteRearms = new WeakMap();
 
 // Loops whose region the router is replacing right now, each against the token
 // of the navigation doing it. Two clicks in a row are two navigations, and only
 // the newest of them owns the loading state - the first one to settle would
 // otherwise clear the flag for both.
 const navigating = new WeakMap();
+// The navigation a loop was last asked for, kept after it ends, so that an
+// answer to an older one arriving late asks the router for nothing.
+const latestNavigations = new WeakMap();
 
 /**
  * Context of the loop the current element belongs to.
@@ -291,7 +313,8 @@ function refreshLayout(list, added) {
  * @return {string} URL, or an empty string when the control leads nowhere.
  */
 function getControlUrl(element) {
-	// The sort control is a `<select>`, every other control is a link.
+	// A sort or a filter shown as a dropdown is a `<select>`, every other
+	// control is a link.
 	if (element instanceof window.HTMLSelectElement) {
 		const selected = element.selectedOptions[0];
 
@@ -318,6 +341,27 @@ function isPlainActivation(event) {
 		event.altKey ||
 		('number' === typeof event.button && 0 !== event.button)
 	);
+}
+
+/**
+ * Hand the focus to the first link or button inside an element, or to the
+ * element itself when it holds none.
+ *
+ * @param {HTMLElement} element The list after a swap, or the first item a Load
+ *                             More appended.
+ */
+function focusIn(element) {
+	const target = element.querySelector('a[href], button');
+
+	if (target) {
+		target.focus();
+		return;
+	}
+
+	// Items that hold no link at all still have to catch the focus rather than
+	// drop it on the body.
+	element.setAttribute('tabindex', '-1');
+	element.focus();
 }
 
 /**
@@ -352,8 +396,21 @@ function announceUpdate(context) {
 function registerUndo(loop, undo) {
 	const undos = loopUndos.get(loop) || [];
 
+	if (!undos.length) {
+		loopUndoAddresses.set(loop, getPageAddress());
+	}
+
 	undos.push(undo);
 	loopUndos.set(loop, undos);
+}
+
+/**
+ * The address of the page, without the hash.
+ *
+ * @return {string} Address.
+ */
+function getPageAddress() {
+	return window.location.pathname + window.location.search;
 }
 
 /**
@@ -381,9 +438,89 @@ function undoManualEdits(loop) {
 // would be looking at two pages at once. Registered while the module is
 // evaluated, which is before the router is ever imported, so this listener is
 // always the earlier of the two.
+//
+// A step in the history of the hash alone - Pro's deep links write one for
+// every slide a lightbox shows - leaves the page, and the edits, where they are.
 window.addEventListener('popstate', () => {
-	window.document.querySelectorAll(LOOP_SELECTOR).forEach(undoManualEdits);
+	window.document.querySelectorAll(LOOP_SELECTOR).forEach((loop) => {
+		if (loopUndoAddresses.get(loop) !== getPageAddress()) {
+			undoManualEdits(loop);
+		}
+	});
 });
+
+/**
+ * Fetch the HTML of a page.
+ *
+ * @param {string}      href   Address.
+ * @param {AbortSignal} signal Signal that cancels the request.
+ *
+ * @return {Promise<string>} HTML.
+ */
+async function fetchPageHtml(href, signal) {
+	const response = await window.fetch(href, { signal });
+
+	if (!response.ok) {
+		throw new Error(response.statusText);
+	}
+
+	return response.text();
+}
+
+/**
+ * Ask the extensions on the page for an address before the loop loads it.
+ *
+ * A listener that holds the page already - Pro fetches ahead what a visitor
+ * points at - calls `respondWith()` with it, synchronously, and the first call
+ * wins. Whatever it gives settles to the page HTML, or to null when it is no
+ * page, fails, or nobody answered, and the loop then loads the address itself.
+ *
+ * @param {HTMLElement} loop    Loop wrapper.
+ * @param {string}      href    Absolute address.
+ * @param {string}      purpose `navigate` for a swap of the loop, `append` for
+ *                              a page added under it.
+ *
+ * @return {Promise<?string>|null} The answer, or null when nobody answered.
+ */
+function requestPage(loop, href, purpose) {
+	let answer = null;
+
+	loop.dispatchEvent(
+		new window.CustomEvent(REQUEST_EVENT, {
+			bubbles: true,
+			detail: {
+				href,
+				purpose,
+				respondWith(page) {
+					if (!answer) {
+						answer = Promise.resolve(page).then(
+							(html) => ('string' === typeof html ? html : null),
+							() => null
+						);
+					}
+				},
+			},
+		})
+	);
+
+	return answer;
+}
+
+/**
+ * Tell the extensions on the page that a loop shows what it loaded.
+ *
+ * @param {HTMLElement} loop    Loop wrapper.
+ * @param {string}      href    Absolute address the loop loaded.
+ * @param {string}      purpose `navigate` or `append`, as it was asked for.
+ */
+function announceLoaded(loop, href, purpose) {
+	loop.dispatchEvent(
+		new window.CustomEvent(LOADED_EVENT, {
+			bubbles: true,
+			detail: { href, purpose },
+		})
+	);
+}
 
 /**
  * Move the items of a fetched list into the rendered one.
@@ -434,13 +571,124 @@ function advanceTrigger(trigger, nextLoop, loop) {
 		return;
 	}
 
-	// The fetched page has no trigger of its own: that was the last one.
-	const node = trigger.closest(PAGINATION_SELECTOR) || trigger;
+	// The fetched page has no trigger of its own: that was the last one. Every
+	// end of the list the gallery has was printed hidden with this page, in
+	// whichever pagination block it sits, and is revealed now.
+	const ends = Array.from(loop.querySelectorAll(END_SELECTOR)).filter(
+		(end) => end.hidden && end.closest(LOOP_SELECTOR) === loop
+	);
+	const pagination = trigger.closest(PAGINATION_SELECTOR);
+
+	// The trigger's pagination goes with it, unless it holds an end of the list.
+	const node =
+		pagination && !pagination.querySelector(END_SELECTOR)
+			? pagination
+			: trigger;
 	const parent = node.parentNode;
 	const sibling = node.nextSibling;
 
 	node.remove();
-	registerUndo(loop, () => parent.insertBefore(node, sibling));
+	ends.forEach((end) => {
+		end.hidden = false;
+	});
+	registerUndo(loop, () => {
+		ends.forEach((end) => {
+			end.hidden = true;
+		});
+		parent.insertBefore(node, sibling);
+	});
+}
+
+/**
+ * Stretch the range of every Query Total of a loop over the page just loaded.
+ *
+ * The range starts where this page started and ends where the fetched one
+ * ends. Only the text node is written, the one Preact renders the block with,
+ * so the router finds its own node when it swaps the region.
+ *
+ * @param {HTMLElement} loop     Loop wrapper.
+ * @param {HTMLElement} nextLoop Loop of the fetched page.
+ */
+function advanceRanges(loop, nextLoop) {
+	const own = (root) =>
+		Array.from(root.querySelectorAll(RANGE_SELECTOR)).filter(
+			(total) => total.closest(LOOP_SELECTOR) === root
+		);
+	const nextTotals = own(nextLoop);
+
+	own(loop).forEach((total, index) => {
+		const next = nextTotals[index];
+		const text = total.firstChild;
+
+		if (!next || !text || window.Node.TEXT_NODE !== text.nodeType) {
+			return;
+		}
+
+		const values = [
+			total.dataset.vpRangeStart,
+			next.dataset.vpRangeEnd,
+			next.dataset.vpRangeTotal,
+		];
+		const previous = text.nodeValue;
+
+		text.nodeValue = total.dataset.vpRangeText.replace(
+			/%(\d)\$s/g,
+			(match, position) => values[position - 1] ?? match
+		);
+		registerUndo(loop, () => {
+			text.nodeValue = previous;
+		});
+	});
+}
+
+/**
+ * Give every Carousel Thumbnails strip of a loop the thumbnails of the page
+ * just loaded.
+ *
+ * The fetched page rendered a strip for its own items, with the pictures,
+ * sizes and loading attributes the server gives this one, so its buttons are
+ * moved over and only renamed: the slides they name follow the ones already
+ * here.
+ *
+ * @param {HTMLElement} loop     Loop wrapper.
+ * @param {HTMLElement} nextLoop Loop of the fetched page.
+ */
+function advanceThumbnails(loop, nextLoop) {
+	const own = (root) =>
+		Array.from(root.querySelectorAll(THUMBS_SELECTOR)).filter(
+			(strip) => strip.closest(LOOP_SELECTOR) === root
+		);
+	const nextStrips = own(nextLoop);
+
+	own(loop).forEach((strip, index) => {
+		const next = nextStrips[index];
+
+		if (!next) {
+			return;
+		}
+
+		const offset = strip.querySelectorAll(THUMB_SELECTOR).length;
+		const label = strip.dataset.vpThumbLabel || '';
+		const added = Array.from(next.querySelectorAll(THUMB_SELECTOR));
+
+		added.forEach((thumb, position) => {
+			const slide = offset + position;
+
+			thumb.dataset.vpSlide = String(slide);
+			thumb.setAttribute('aria-current', 'false');
+			thumb.setAttribute(
+				'aria-label',
+				label.replace('%d', String(slide + 1))
+			);
+			strip.appendChild(thumb);
+		});
+
+		registerUndo(loop, () => {
+			added.forEach((thumb) => {
+				thumb.remove();
+			});
+		});
+	});
 }
 
 /**
@@ -483,20 +731,41 @@ async function loadNextPage(trigger, context, byClick) {
 	pendingRequests.set(loop, controller);
 	context.isLoading = true;
 
-	try {
-		const response = await window.fetch(href, {
-			signal: controller.signal,
-		});
+	const answer = requestPage(loop, href, 'append');
 
-		if (!response.ok) {
-			throw new Error(response.statusText);
+	try {
+		// An answer that hangs is not waited for past the deadline a
+		// navigation has; the page is asked for again.
+		let html = answer
+			? await Promise.race([
+					answer,
+					new Promise((resolve) => {
+						window.setTimeout(
+							() => resolve(null),
+							NAVIGATION_TIMEOUT
+						);
+					}),
+				])
+			: null;
+
+		// A navigation that started while the answer was awaited.
+		controller.signal.throwIfAborted();
+
+		if (null === html) {
+			html = await fetchPageHtml(href, controller.signal);
 		}
 
-		const html = await response.text();
 		const parsed = new window.DOMParser().parseFromString(
 			html,
 			'text/html'
 		);
+
+		// A parser without scripts reads the no-JavaScript copy of a lazy
+		// image as a real one, which would load at once beside the lazy one.
+		parsed.querySelectorAll('noscript').forEach((node) => {
+			node.remove();
+		});
+
 		const nextLoop = parsed.querySelector(
 			`[data-wp-router-region="${region}"]`
 		);
@@ -515,9 +784,28 @@ async function loadNextPage(trigger, context, byClick) {
 				item.remove();
 			});
 		});
+
+		// Read before the trigger can go, since a removed node drops the focus
+		// it held on the body. Moved only for a visitor who asked for this page.
+		// One the observer loaded arrives while they scroll, and the trigger
+		// may still hold the focus of an earlier click, so moving it would pull
+		// the view to the new items.
+		const hadFocus =
+			byClick && trigger.contains(window.document.activeElement);
+
 		advanceTrigger(trigger, nextLoop, loop);
+		advanceRanges(loop, nextLoop);
+		advanceThumbnails(loop, nextLoop);
 		refreshLayout(list, added);
 		announceUpdate(context);
+
+		// The last page took the trigger away. The first of the items that
+		// arrived is where the visitor was going.
+		if (hadFocus && !trigger.isConnected && added.length) {
+			focusIn(added[0]);
+		}
+
+		announceLoaded(loop, href, 'append');
 
 		return APPENDED;
 	} catch (error) {
@@ -542,12 +830,140 @@ async function loadNextPage(trigger, context, byClick) {
 	}
 }
 
+/**
+ * Swap a loop for its state at another address.
+ *
+ * The region comes back from a single server render, so the items and every
+ * control around them stay consistent, and the router owns the URL.
+ *
+ * @param {HTMLElement} ref             Control that asked.
+ * @param {string}      href            Address of the state.
+ * @param {Object}      context         Loop context.
+ * @param {Object}      options         Options.
+ * @param {boolean}     options.replace Whether the address replaces the current
+ *                                      history entry rather than adding one.
+ *
+ * @return {Generator} Whether the swap was the loop's latest and is done.
+ */
+function* swapLoop(ref, href, context, { replace = false } = {}) {
+	// The loop wrapper is the region root, so the router keeps this
+	// node while everything inside it is replaced.
+	const loop = ref.closest(LOOP_SELECTOR);
+
+	// Sent first, so that whatever would follow this navigation from the page
+	// it replaces, such as a search waiting for a pause in the typing, stops
+	// before anything else happens.
+	const answer = loop ? requestPage(loop, href, 'navigate') : null;
+
+	if (loop) {
+		// A Load More still in flight would append its page under the
+		// one the router is about to render, and register undos for a
+		// rollback that already ran.
+		pendingRequests.get(loop)?.abort();
+		pendingRequests.delete(loop);
+
+		undoManualEdits(loop);
+	}
+
+	context.isLoading = true;
+
+	// Named so that a navigation the visitor started over the top of
+	// this one can be told apart from it: whichever is the loop's
+	// current one is the one that gets to say it has finished.
+	const token = {};
+
+	if (loop) {
+		navigating.set(loop, token);
+		latestNavigations.set(loop, token);
+	}
+
+	// Ends the loading state, and says whether this navigation was
+	// still the loop's own to end. A newer one owns the loop from the
+	// moment it starts, this one leaves everything to it.
+	const release = () => {
+		if (loop && navigating.get(loop) !== token) {
+			return false;
+		}
+
+		context.isLoading = false;
+
+		if (loop) {
+			navigating.delete(loop);
+		}
+
+		return true;
+	};
+
+	try {
+		const router = yield import('@wordpress/interactivity-router');
+
+		let asked = false;
+
+		const timedOut = yield Promise.race([
+			// A page an extension answered with is the request the router would
+			// make again. Without one, the router makes its own. The router
+			// takes the last navigation it is asked for, so one the visitor has
+			// since replaced asks for nothing.
+			Promise.resolve(answer).then(async (html) => {
+				if (!loop || latestNavigations.get(loop) === token) {
+					asked = true;
+					await router.actions.navigate(
+						href,
+						html ? { replace, html } : { replace }
+					);
+				}
+
+				return false;
+			}),
+			new Promise((resolve) => {
+				window.setTimeout(() => resolve(true), NAVIGATION_TIMEOUT);
+			}),
+		]);
+
+		// An answer that has not come by the deadline is given up, and the
+		// address loads in full, as when the router's own fetch hangs.
+		if (timedOut && !asked) {
+			// A newer navigation keeps the loop.
+			if (loop && latestNavigations.get(loop) === token) {
+				latestNavigations.set(loop, {});
+			}
+
+			throw new Error('Timeout');
+		}
+	} catch {
+		// Only the navigation still wanted may fall back to a full load: an
+		// older one would take the visitor off the control they used since.
+		if (release()) {
+			window.location.assign(href);
+		}
+
+		return false;
+	}
+
+	if (!release()) {
+		return false;
+	}
+
+	const list = loop ? loop.querySelector(LIST_SELECTOR) : null;
+
+	if (list) {
+		refreshLayout(list);
+	}
+
+	if (loop) {
+		announceLoaded(loop, href, 'navigate');
+	}
+
+	return true;
+}
+
 store('visual-portfolio/loop', {
 	state: {
 		// True wherever this module is running, which is the only thing a
-		// fallback control needs to know: the sort form binds its submit button
-		// to it and disappears the moment the select starts navigating on its
-		// own. A module that never arrives leaves the button where it is.
+		// fallback control needs to know. A filter or sort form binds its
+		// submit button to it, which disappears the moment the select starts
+		// navigating on its own. A module that never arrives leaves the button
+		// where it is.
 		isEnhanced: true,
 
 		// Read through the context so that two loops on one page keep their own
@@ -579,93 +995,64 @@ store('visual-portfolio/loop', {
 
 			event.preventDefault();
 
-			const context = getLoopContext();
-			// The loop wrapper is the region root, so the router keeps this
-			// node while everything inside it is replaced.
+			// Found before the swap, which may take the control out.
 			const loop = ref.closest(LOOP_SELECTOR);
 
-			if (loop) {
-				// A Load More still in flight would append its page under the
-				// one the router is about to render, and register undos for a
-				// rollback that already ran.
-				pendingRequests.get(loop)?.abort();
-				pendingRequests.delete(loop);
-
-				undoManualEdits(loop);
-			}
-
-			context.isLoading = true;
-
-			// Named so that a navigation the visitor started over the top of
-			// this one can be told apart from it: whichever is the loop's
-			// current one is the one that gets to say it has finished.
-			const token = {};
-
-			if (loop) {
-				navigating.set(loop, token);
-			}
-
-			// Ends the loading state, and says whether this navigation was
-			// still the loop's own to end. A newer one owns the loop from the
-			// moment it starts, this one leaves everything to it.
-			const release = () => {
-				if (loop && navigating.get(loop) !== token) {
-					return false;
-				}
-
-				context.isLoading = false;
-
-				if (loop) {
-					navigating.delete(loop);
-				}
-
-				return true;
-			};
-
-			try {
-				const router = yield import('@wordpress/interactivity-router');
-
-				yield Promise.race([
-					router.actions.navigate(href),
-					new Promise((resolve) => {
-						window.setTimeout(resolve, NAVIGATION_TIMEOUT);
-					}),
-				]);
-			} catch {
-				release();
-				window.location.assign(href);
-				return;
-			}
-
-			if (!release()) {
+			if (!(yield* swapLoop(ref, href, getLoopContext()))) {
 				return;
 			}
 
 			const list = loop ? loop.querySelector(LIST_SELECTOR) : null;
 
-			if (list) {
-				refreshLayout(list);
-			}
-
 			// The node that was activated is either gone - the last page has
 			// no Next - or still standing there meaning something else, and
 			// either way the visitor is left somewhere they did not choose.
-			// The items that just arrived are where they meant to be. A sort
-			// control is the exception: it comes back from the swap unchanged,
-			// and moving off it would lose them their place in the form.
+			// The items that just arrived are where they meant to be. A select
+			// is the exception. It comes back from the swap unchanged, and
+			// moving off it would lose them their place in the form.
 			if (list && !(ref instanceof window.HTMLSelectElement)) {
-				const target = list.querySelector('a[href], button');
-
-				if (target) {
-					target.focus();
-				} else {
-					// A gallery whose items hold no link at all still has to
-					// catch the focus rather than drop it on the body.
-					list.setAttribute('tabindex', '-1');
-					list.focus();
-				}
+				focusIn(list);
 			}
 		}),
+
+		/**
+		 * Swap a loop for its state at another address, for a script that
+		 * leads the loop somewhere no control of its own links to.
+		 *
+		 * Called from an action or a callback of any store, or from a function
+		 * wrapped in `withScope()`, so that the loop context is the one of the
+		 * element. Leaves the focus where it is.
+		 *
+		 * @param {string}      href            Address, absolute or relative to
+		 *                                      the page.
+		 * @param {Object}      options         Options.
+		 * @param {boolean}     options.replace Whether the address replaces the
+		 *                                      current history entry.
+		 * @param {HTMLElement} options.ref     Element inside the loop, the
+		 *                                      current element when left out.
+		 *
+		 * @return {Generator} Whether the swap was the loop's latest and is
+		 *                     done.
+		 */
+		navigateTo: function* (href, { replace = false, ref } = {}) {
+			// Bound as a directive, it would be handed an event.
+			if ('string' !== typeof href || !href) {
+				return false;
+			}
+
+			const element = ref || getElement()?.ref;
+
+			if (!element) {
+				return false;
+			}
+
+			return yield* swapLoop(
+				element,
+				new window.URL(href, window.location.href).href,
+				getLoopContext(),
+				{ replace }
+			);
+		},
 
 		/**
 		 * Append the next page of items.
@@ -681,7 +1068,13 @@ store('visual-portfolio/loop', {
 
 			event.preventDefault();
 
-			yield loadNextPage(ref, getLoopContext(), true);
+			// A click from a script, such as a lightbox asking for the slides
+			// of the next page, is not a visitor asking to leave for it.
+			yield loadNextPage(ref, getLoopContext(), event.isTrusted);
+
+			// The page a click on an infinite trigger loaded may leave the
+			// trigger in view, which the observer does not report as a change.
+			infiniteRearms.get(ref)?.();
 		}),
 	},
 	callbacks: {
@@ -716,70 +1109,60 @@ store('visual-portfolio/loop', {
 			// taken while there still is one.
 			const context = getLoopContext();
 
-			// How far ahead of the viewport a page is fetched, and how often
-			// the visitor is asked before it is. Written onto the trigger by
-			// whoever renders it; absent, the loop scrolls on by itself from
-			// the first screen, 300px early.
-			const number = (name, fallback) => {
-				const value = parseInt(ref.dataset[name], 10);
+			// How far ahead of the viewport a page is fetched, written onto the
+			// trigger by whoever renders it; absent, 300px early.
+			const threshold = parseInt(ref.dataset.vpInfiniteThreshold, 10);
 
-				return Number.isNaN(value) ? fallback : value;
+			let observer;
+
+			// Intersection is reported on change, and neither appending items
+			// nor refusing to fetch them moves a trigger that was already in
+			// view. Observing it again reports where it is now - without it a
+			// page turned down because the router was mid-swap would be the
+			// last one the loop ever loaded.
+			const rearm = () => {
+				if (ref.isConnected) {
+					observer.unobserve(ref);
+					observer.observe(ref);
+				}
 			};
 
-			const everyPages = Math.max(0, number('vpInfiniteEveryPage', 0));
-			let loaded = 0;
-			let paused = 'true' === ref.dataset.vpInfiniteStartupLoadMore;
+			infiniteRearms.set(ref, rearm);
 
-			// The trigger is a Load More button as well as a sentinel: a click
-			// on it lets the scrolling resume.
-			const resume = () => {
-				paused = false;
-			};
-
-			ref.addEventListener('click', resume);
-
-			const observer = new window.IntersectionObserver(
+			observer = new window.IntersectionObserver(
 				(entries) => {
-					if (paused) {
-						return;
-					}
-
 					if (!entries.some((entry) => entry.isIntersecting)) {
 						return;
 					}
 
+					if (
+						!ref.dispatchEvent(
+							new window.CustomEvent(INFINITE_LOAD_EVENT, {
+								bubbles: true,
+								cancelable: true,
+							})
+						)
+					) {
+						return;
+					}
+
 					loadNextPage(ref, context, false).then((result) => {
-						if (STOP === result) {
-							return;
-						}
-
-						if (APPENDED === result) {
-							loaded += 1;
-
-							if (everyPages && 0 === loaded % everyPages) {
-								paused = true;
-							}
-						}
-
-						// Intersection is reported on change, and neither
-						// appending items nor refusing to fetch them moves a
-						// trigger that was already in view. Observing it again
-						// reports where it is now - without it a page turned
-						// down because the router was mid-swap would be the
-						// last one the loop ever loaded.
-						if (ref.isConnected) {
-							observer.unobserve(ref);
-							observer.observe(ref);
+						if (STOP !== result) {
+							rearm();
 						}
 					});
 				},
-				{ rootMargin: `${number('vpInfiniteThreshold', 300)}px` }
+				{
+					rootMargin: `${
+						Number.isNaN(threshold) ? 300 : threshold
+					}px`,
+				}
 			);
 
 			observer.observe(ref);
 
 			return () => {
-				ref.removeEventListener('click', resume);
+				infiniteRearms.delete(ref);
 				observer.disconnect();
 			};
 		},

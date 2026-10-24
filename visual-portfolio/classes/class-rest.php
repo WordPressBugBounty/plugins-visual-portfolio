@@ -73,19 +73,19 @@ class Visual_Portfolio_Rest extends WP_REST_Controller {
 			)
 		);
 
-		// Get filter items.
-		register_rest_route(
-			$namespace,
-			'/get_filter_items/',
-			array(
-				'methods'             => WP_REST_Server::EDITABLE,
-				'callback'            => array( $this, 'get_filter_items' ),
-				'permission_callback' => array( $this, 'get_filter_items_permission' ),
-			)
-		);
-
-		// Get gallery items for the editor preview of a Gallery Loop block.
+		// Get the filter items and the gallery items for the editor preview of
+		// a Gallery Loop block.
 		if ( visual_portfolio()->supports_loop_blocks() ) {
+			register_rest_route(
+				$namespace,
+				'/get_filter_items/',
+				array(
+					'methods'             => WP_REST_Server::EDITABLE,
+					'callback'            => array( $this, 'get_filter_items' ),
+					'permission_callback' => array( $this, 'get_filter_items_permission' ),
+				)
+			);
+
 			register_rest_route(
 				$namespace,
 				'/get_loop_items/',
@@ -126,9 +126,19 @@ class Visual_Portfolio_Rest extends WP_REST_Controller {
 	 * @return int $max_pages Response max pages data.
 	 */
 	public function calculate_max_pages( $params ) {
-		return Visual_Portfolio_Get::calculate_max_pages(
+		// Anyone who edits a post reaches this endpoint, so a custom query
+		// counts only the statuses the user may read.
+		$restrict_statuses = array( 'Visual_Portfolio_Custom_Query_Guard', 'restrict_args' );
+
+		add_filter( 'vpf_extend_query_args', $restrict_statuses, PHP_INT_MAX );
+
+		$max_pages = Visual_Portfolio_Get::calculate_max_pages(
 			Visual_Portfolio_Convert_Attributes::modern_to_legacy( $params )
 		);
+
+		remove_filter( 'vpf_extend_query_args', $restrict_statuses, PHP_INT_MAX );
+
+		return $max_pages;
 	}
 
 	/**
@@ -162,12 +172,11 @@ class Visual_Portfolio_Rest extends WP_REST_Controller {
 	/**
 	 * Build the "All" filter item.
 	 *
-	 * @param int  $post_id - post the filter is displayed on.
-	 * @param bool $active - whether no filter is applied.
+	 * @param int $post_id - post the filter is displayed on.
 	 *
 	 * @return array
 	 */
-	private function get_all_filter_item( $post_id, $active = true ) {
+	private function get_all_filter_item( $post_id ) {
 		$url = get_permalink( $post_id );
 
 		return array(
@@ -175,11 +184,54 @@ class Visual_Portfolio_Rest extends WP_REST_Controller {
 			'label'       => esc_html__( 'All', 'visual-portfolio' ),
 			'description' => '',
 			'count'       => false,
-			'active'      => $active,
+			'active'      => true,
 			'url'         => $url ? $url : home_url(),
 			'taxonomy'    => '',
 			'id'          => 0,
 			'parent'      => 0,
+		);
+	}
+
+	/**
+	 * Options each source may pass to the editor previews of a Gallery Loop.
+	 *
+	 * @param array $params - request parameters in the legacy format.
+	 *
+	 * @return array Allowed option names, by content source.
+	 */
+	private function get_loop_source_configs( $params ) {
+		return apply_filters(
+			'vpf_rest_loop_items_source_configs',
+			array(
+				'post-based' => array(
+					'posts_source',
+					'post_types_set',
+					'posts_ids',
+					'posts_excluded_ids',
+					'posts_offset',
+					'posts_taxonomies',
+					'posts_taxonomies_relation',
+					'posts_order_by',
+					'posts_order_direction',
+					'posts_avoid_duplicate_posts',
+					'posts_exclude_current',
+					'posts_keyword',
+					'posts_sticky',
+					'posts_authors',
+					'posts_formats',
+					'posts_excluded_taxonomies',
+					'posts_custom_query',
+				),
+				'images' => array(
+					'images',
+					'image_categories',
+					'images_titles_source',
+					'images_descriptions_source',
+					'images_order_by',
+					'images_order_direction',
+				),
+			),
+			$params
 		);
 	}
 
@@ -201,9 +253,12 @@ class Visual_Portfolio_Rest extends WP_REST_Controller {
 			}
 		}
 
-		$params         = Visual_Portfolio_Convert_Attributes::modern_to_legacy( $params );
+		$post_id = absint( $request->get_param( 'post_id' ) );
+
+		// Converted the way the block context is when the page renders, so the
+		// editor lists the terms the page will.
+		$params         = Visual_Portfolio_Convert_Attributes::modern_to_legacy( $params, true );
 		$content_source = $params['content_source'] ?? false;
-		$post_id        = absint( $request->get_param( 'post_id' ) );
 
 		if ( ! $content_source ) {
 			return $this->error(
@@ -212,137 +267,64 @@ class Visual_Portfolio_Rest extends WP_REST_Controller {
 			);
 		}
 
-		// Define allowed parameters for each content source.
-		$source_configs = apply_filters(
-			'vpf_rest_filter_items_source_configs',
-			array(
-				'post-based' => array(
-					'posts_source',
-					'post_types_set',
-					'posts_taxonomies',
-					'posts_taxonomies_relation',
-					'posts_order_by',
-					'posts_order_direction',
-				),
-				'images' => array(
-					'images',
-					'images_titles_source',
-					'images_descriptions_source',
-					'images_order_by',
-					'images_order_direction',
-					'items_count',
-				),
-			),
-			$params
-		);
+		// The options the preview of the items takes, so the terms are those of
+		// the posts it shows.
+		$source_configs = apply_filters( 'vpf_rest_filter_items_source_configs', $this->get_loop_source_configs( $params ), $params );
 
 		// Sources that are not filterable have no terms to offer, but they are
 		// not an error - the block simply shows the "All" item.
 		if ( ! isset( $source_configs[ $content_source ] ) ) {
-			return $this->success(
-				array(
-					$this->get_all_filter_item(
-						$post_id,
-						! Visual_Portfolio_Get::get_filter_active_item( array() )
-					),
-				)
+			return $this->success( array( $this->get_all_filter_item( $post_id ) ) );
+		}
+
+		$options = array_merge(
+			array(
+				'content_source' => $content_source,
+				'block_id'       => 'rest-filter-preview',
+			),
+			array_intersect_key( $params, array_flip( $source_configs[ $content_source ] ) )
+		);
+
+		// `perm` holds back only private posts: drafts and the other statuses a
+		// query may ask for are left to whoever asked, and anyone who edits a
+		// post of their own reaches this endpoint. The statuses are checked on
+		// the arguments the query ends up with, whatever spelling led there.
+		$restrict_statuses = array( 'Visual_Portfolio_Custom_Query_Guard', 'restrict_args' );
+
+		$restrict_to_readable = static function ( $query ) {
+			$query->set( 'perm', 'readable' );
+		};
+
+		add_filter( 'vpf_extend_query_args', $restrict_statuses, PHP_INT_MAX );
+		add_action( 'pre_get_posts', $restrict_to_readable );
+
+		$terms = Visual_Portfolio_Filter_Terms::get( $options );
+
+		remove_action( 'pre_get_posts', $restrict_to_readable );
+		remove_filter( 'vpf_extend_query_args', $restrict_statuses, PHP_INT_MAX );
+
+		$url      = get_permalink( $post_id );
+		$url      = $url ? $url : home_url();
+		$response = array( $this->get_all_filter_item( $post_id ) );
+
+		foreach ( $terms as $term ) {
+			// Posts are filtered by `taxonomy:slug`, images by the slug alone.
+			$filter = $term['id'] ? rawurlencode( $term['taxonomy'] . ':' ) . $term['filter'] : rawurlencode( $term['filter'] );
+
+			$response[] = array(
+				'filter'      => $term['filter'],
+				'label'       => $term['label'],
+				'description' => $term['description'],
+				'count'       => $term['count'],
+				'active'      => false,
+				'url'         => add_query_arg( 'vp_filter', $filter, $url ),
+				'taxonomy'    => $term['taxonomy'],
+				'id'          => $term['id'],
+				'parent'      => $term['parent'],
 			);
 		}
 
-		// Filter and add only relevant parameters.
-		$allowed_keys    = array_flip( $source_configs[ $content_source ] );
-		$filtered_params = array_intersect_key( $params, $allowed_keys );
-
-		$options = array_merge(
-			array( 'content_source' => $content_source ),
-			$filtered_params
-		);
-
-		// Get query parameters.
-		$query_opts = Visual_Portfolio_Get::get_query_params( $options, true );
-
-		// Get active filter item.
-		$active_item = Visual_Portfolio_Get::get_filter_active_item( $query_opts );
-
-		// Get filter items.
-		if ( 'images' === $content_source || 'social-stream' === $content_source ) {
-			$term_items = Visual_Portfolio_Get::get_images_terms( $query_opts, $active_item );
-		} else {
-			$portfolio_query = new WP_Query( $query_opts );
-			$term_items      = Visual_Portfolio_Get::get_posts_terms( $portfolio_query, $active_item );
-		}
-
-		// Helper function to generate filter URLs.
-		$get_filter_url = function ( $filter = '', $taxonomy = '' ) use ( $post_id, $content_source ) {
-			// Get the permalink of the current post.
-			$url = get_permalink( $post_id );
-
-			// If no valid URL found, fallback to home URL.
-			if ( ! $url ) {
-				$url = home_url();
-			}
-
-			// Add new filter parameter if it exists.
-			if ( $filter && '*' !== $filter ) {
-				if ( 'images' === $content_source || 'social-stream' === $content_source ) {
-					$url = add_query_arg( 'vp_filter', rawurlencode( $filter ), $url );
-				}
-				if ( 'post-based' === $content_source ) {
-					$post_filter = rawurlencode( $taxonomy . ':' ) . $filter;
-					$url         = add_query_arg( 'vp_filter', $post_filter, $url );
-				}
-			}
-
-			return $url;
-		};
-
-		// Prepare response.
-		$response = array();
-
-		// Add 'All' item.
-		$response[] = $this->get_all_filter_item( $post_id, ! $active_item );
-
-		// Add term items.
-		if ( ! empty( $term_items['terms'] ) ) {
-			foreach ( $term_items['terms'] as $term ) {
-				$response[] = array(
-					'filter'      => $term['filter'],
-					'label'       => $term['label'],
-					'description' => $term['description'],
-					'count'       => $term['count'],
-					'active'      => $term['active'],
-					'url'         => $get_filter_url( $term['filter'], $term['taxonomy'] ),
-					'taxonomy'    => $term['taxonomy'] ?? '',
-					'id'          => $term['id'],
-					'parent'      => $term['parent'],
-				);
-			}
-		}
-
 		return $this->success( $response );
-	}
-
-	/**
-	 * Whether the current user edits content of any kind.
-	 *
-	 * The query endpoints answer with data the editor needs to preview a block,
-	 * so editing anything is enough - a user without the blanket `edit_posts` may
-	 * still edit a custom post type the block is used in.
-	 *
-	 * @return bool
-	 */
-	private function can_edit_content() {
-		if ( current_user_can( 'edit_posts' ) ) {
-			return true;
-		}
-
-		foreach ( get_post_types( array( 'show_in_rest' => true ), 'objects' ) as $post_type ) {
-			if ( current_user_can( $post_type->cap->edit_posts ) ) {
-				return true;
-			}
-		}
-
-		return false;
 	}
 
 	/**
@@ -351,7 +333,7 @@ class Visual_Portfolio_Rest extends WP_REST_Controller {
 	 * @return mixed
 	 */
 	public function get_filter_items_permission() {
-		if ( $this->can_edit_content() ) {
+		if ( Visual_Portfolio_Security::current_user_can_edit_content() ) {
 			return true;
 		}
 
@@ -387,7 +369,7 @@ class Visual_Portfolio_Rest extends WP_REST_Controller {
 	 * @return mixed
 	 */
 	public function get_loop_items_permission() {
-		if ( $this->can_edit_content() ) {
+		if ( Visual_Portfolio_Security::current_user_can_edit_content() ) {
 			return true;
 		}
 
@@ -453,36 +435,7 @@ class Visual_Portfolio_Rest extends WP_REST_Controller {
 			);
 		}
 
-		// Define allowed parameters for each content source.
-		$source_configs = apply_filters(
-			'vpf_rest_loop_items_source_configs',
-			array(
-				'post-based' => array(
-					'posts_source',
-					'post_types_set',
-					'posts_ids',
-					'posts_excluded_ids',
-					'posts_offset',
-					'posts_taxonomies',
-					'posts_taxonomies_relation',
-					'posts_order_by',
-					'posts_order_direction',
-					'posts_avoid_duplicate_posts',
-					'posts_exclude_current',
-					'posts_keyword',
-					'posts_custom_query',
-				),
-				'images' => array(
-					'images',
-					'image_categories',
-					'images_titles_source',
-					'images_descriptions_source',
-					'images_order_by',
-					'images_order_direction',
-				),
-			),
-			$params
-		);
+		$source_configs = $this->get_loop_source_configs( $params );
 
 		// A source no options are registered for has nothing that can be
 		// previewed safely, but it is not an error - the block shows its
@@ -548,11 +501,17 @@ class Visual_Portfolio_Rest extends WP_REST_Controller {
 			$query->set( 'perm', 'readable' );
 		};
 
+		// The statuses the saved gallery will ask for, so the preview shows what
+		// visitors will see; see `Visual_Portfolio_Custom_Query_Guard`.
+		$restrict_statuses = array( 'Visual_Portfolio_Custom_Query_Guard', 'restrict_args' );
+
+		add_filter( 'vpf_extend_query_args', $restrict_statuses, PHP_INT_MAX );
 		add_action( 'pre_get_posts', $restrict_to_readable );
 
 		$result = Visual_Portfolio_Get::get_loop_items( $options, $query_id );
 
 		remove_action( 'pre_get_posts', $restrict_to_readable );
+		remove_filter( 'vpf_extend_query_args', $restrict_statuses, PHP_INT_MAX );
 
 		$response = array(
 			'items'     => array(),
@@ -601,14 +560,8 @@ class Visual_Portfolio_Rest extends WP_REST_Controller {
 	 * @return mixed
 	 */
 	public function get_layouts_permission() {
-		if ( current_user_can( 'edit_posts' ) ) {
+		if ( Visual_Portfolio_Security::current_user_can_edit_content() ) {
 			return true;
-		}
-
-		foreach ( get_post_types( array( 'show_in_rest' => true ), 'objects' ) as $post_type ) {
-			if ( current_user_can( $post_type->cap->edit_posts ) ) {
-				return true;
-			}
 		}
 
 		return $this->error( 'not_allowed', esc_html__( 'Sorry, you are not allowed to get list of saved layouts.', 'visual-portfolio' ), true );
@@ -660,7 +613,8 @@ class Visual_Portfolio_Rest extends WP_REST_Controller {
 			return $this->error( 'post_id_required', esc_html__( 'Post ID is required for this request.', 'visual-portfolio' ), true );
 		}
 
-		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+		// The endpoint writes the meta of a Saved Layout, so it takes no other post.
+		if ( 'vp_lists' !== get_post_type( $post_id ) || ! current_user_can( 'edit_post', $post_id ) ) {
 			return $this->error( 'not_allowed', esc_html__( 'Sorry, you are not allowed to edit saved layouts data.', 'visual-portfolio' ), true );
 		}
 
@@ -766,7 +720,7 @@ class Visual_Portfolio_Rest extends WP_REST_Controller {
 	 */
 	public function error( $code, $response, $true_error = false ) {
 		if ( $true_error ) {
-			return new WP_Error( $code, $response, array( 'status' => 401 ) );
+			return new WP_Error( $code, $response, array( 'status' => rest_authorization_required_code() ) );
 		}
 
 		return new WP_REST_Response(

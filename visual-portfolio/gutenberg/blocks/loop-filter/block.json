@@ -48,17 +48,23 @@
 	"selectors": { "root": ".vp-block-loop-filter" },
 	"usesContext": [
 		"vp/blockId",
+		"vp/queryId",
 		"vp/queryType",
 		"vp/baseQuery",
 		"vp/postsQuery",
 		"vp/imagesQuery",
 		"vp/sourceQuery"
 	],
-	"providesContext": { "vp/showCount": "showCount" },
+	"providesContext": {
+		"vp/showCount": "showCount",
+		"vp/displayAsDropdown": "displayAsDropdown"
+	},
 	"styles": [{ "name": "fill", "label": "Fill" }],
 	"attributes": {
 		"showCount": { "type": "boolean", "default": false },
-		"showAllItem": { "type": "boolean", "default": true }
+		"showAllItem": { "type": "boolean", "default": true },
+		"displayAsDropdown": { "type": "boolean", "default": false },
+		"extensions": { "type": "object", "default": {} }
 	},
 	"style": "visual-portfolio-block-loop-filter"
 }

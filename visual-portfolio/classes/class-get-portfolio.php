@@ -83,7 +83,14 @@ class Visual_Portfolio_Get {
 	 *
 	 * @var array
 	 */
-	private static $loop_query_vars = array( 'page', 'filter', 'sort' );
+	private static $loop_query_vars = array( 'page', 'filter', 'sort', 'search' );
+
+	/**
+	 * Longest visitor search a loop reads, in characters. The rest is cut off.
+	 *
+	 * @var int
+	 */
+	const LOOP_SEARCH_MAX_LENGTH = 100;
 
 	/**
 	 * Query string name of a loop state parameter.
@@ -93,7 +100,7 @@ class Visual_Portfolio_Get {
 	 * caller without an id gets the legacy global names: the legacy renderer
 	 * goes through these very helpers, and its URLs are public.
 	 *
-	 * @param string          $name     - `page`, `filter` or `sort`.
+	 * @param string          $name     - `page`, `filter`, `sort` or `search`.
 	 * @param int|string|null $query_id - id of the loop, or null for the legacy names.
 	 *
 	 * @return string
@@ -123,6 +130,113 @@ class Visual_Portfolio_Get {
 		$query_id = (int) $query_id;
 
 		return $query_id > 0 ? $query_id : null;
+	}
+
+	/**
+	 * Whether a Gallery Loop can be searched by its visitors.
+	 *
+	 * The free plugin reads the term and hands it over, and an extension that
+	 * applies it to the query says so through `vpf_loop_search`. Without one the
+	 * term changes nothing. Social and taxonomy sources have no text to match. A
+	 * loop without a query id would read `vp_search`, the parameter of the
+	 * classic search element, which every gallery on the page shares.
+	 *
+	 * @param array           $options  - options of the loop, in the legacy format.
+	 * @param int|string|null $query_id - id of the loop.
+	 *
+	 * @return bool
+	 */
+	public static function supports_loop_search( $options, $query_id ) {
+		// `content_source` names a source the way `queryType` does, but for posts.
+		if ( null === self::sanitize_query_id( $query_id ) || ! self::loop_source_supports( $options['content_source'] ?? '', 'search' ) ) {
+			return false;
+		}
+
+		/**
+		 * Filters whether an extension applies the visitor search of a Gallery
+		 * Loop to its query.
+		 *
+		 * The term reaches `vpf_extend_options_before_query_args` and
+		 * `vpf_extend_query_args` as `$options['loop_search']`.
+		 *
+		 * @param bool  $handled - whether the search is applied.
+		 * @param array $options - options of the loop, in the legacy format.
+		 */
+		return (bool) apply_filters( 'vpf_loop_search', false, $options );
+	}
+
+	/**
+	 * Which controls of a Gallery Loop each content source leaves out.
+	 *
+	 * A source missing from the map, or a control missing from its entry,
+	 * supports the control. The editor reads the same map to say why a control
+	 * shows nothing on the page.
+	 *
+	 * @return array `queryType` => array( control => bool ).
+	 */
+	public static function get_loop_source_supports() {
+		/**
+		 * Filters the controls of a Gallery Loop each content source leaves out.
+		 *
+		 * The controls are `sort`, `filter` and `search`. A source that starts
+		 * to support one sets it to true.
+		 *
+		 * @param array $supports - `queryType` => array( control => bool ).
+		 */
+		return (array) apply_filters(
+			'vpf_loop_source_supports',
+			array(
+				'taxonomies'    => array(
+					'sort'   => false,
+					'filter' => false,
+					'search' => false,
+				),
+				'social-stream' => array(
+					'filter' => false,
+					'search' => false,
+				),
+			)
+		);
+	}
+
+	/**
+	 * Whether a content source of a Gallery Loop supports one of its controls.
+	 *
+	 * @param string $query_type - `queryType` of the loop.
+	 * @param string $control    - `sort`, `filter` or `search`.
+	 *
+	 * @return bool
+	 */
+	public static function loop_source_supports( $query_type, $control ) {
+		$supports = self::get_loop_source_supports();
+
+		return false !== ( $supports[ $query_type ][ $control ] ?? true );
+	}
+
+	/**
+	 * The term a visitor searches a Gallery Loop for.
+	 *
+	 * ?vp-3-search=forest for the loop with query id 3.
+	 *
+	 * @param array           $options  - options of the loop, in the legacy format.
+	 * @param int|string|null $query_id - id of the loop.
+	 *
+	 * @return string Empty when there is none, or nothing applies it.
+	 */
+	public static function get_current_search( $options, $query_id ) {
+		if ( ! self::supports_loop_search( $options, $query_id ) ) {
+			return '';
+		}
+
+		$name = self::get_query_var_name( 'search', $query_id );
+
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! isset( $_GET[ $name ] ) ) {
+			return '';
+		}
+
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return trim( mb_substr( sanitize_text_field( wp_unslash( $_GET[ $name ] ) ), 0, self::LOOP_SEARCH_MAX_LENGTH ) );
 	}
 
 	/**
@@ -264,7 +378,11 @@ class Visual_Portfolio_Get {
 	 */
 	public static function is_preview() {
 		$frame = false;
-		if ( isset( $_POST['vp_preview_nonce'] ) && wp_verify_nonce( sanitize_key( $_POST['vp_preview_nonce'] ), 'vp-ajax-nonce' ) ) {
+		if (
+			isset( $_POST['vp_preview_nonce'] ) &&
+			wp_verify_nonce( sanitize_key( $_POST['vp_preview_nonce'] ), 'vp-ajax-nonce' ) &&
+			Visual_Portfolio_Security::current_user_can_edit_content()
+		) {
             // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
 			$frame = isset( $_POST['vp_preview_frame'] ) ? Visual_Portfolio_Security::sanitize_boolean( $_POST['vp_preview_frame'] ) : false;
 			$id    = isset( $_POST['vp_preview_frame_id'] ) ? sanitize_text_field( wp_unslash( $_POST['vp_preview_frame_id'] ) ) : false;
@@ -672,6 +790,9 @@ class Visual_Portfolio_Get {
 	 *     @type array       $query_opts      Query options.
 	 *     @type object|null $portfolio_query Query object, null for images and social sources.
 	 *     @type int         $max_pages       Total pages count.
+	 *     @type int         $found_pages     Pages the query really found.
+	 *     @type int|null    $found_items     Items the query matched on all pages, null where the source does not say.
+	 *     @type int         $per_page        Items per page, zero or less for all of them.
 	 *     @type int         $start_page      Currently requested page.
 	 *     @type string|bool $next_page_url   URL of the next page, false when there is none.
 	 * }
@@ -703,6 +824,11 @@ class Visual_Portfolio_Get {
 		// the numbered pagination are built from the answer.
 		$found_pages = 0;
 
+		// How many items the query matched over all its pages, or null where
+		// the source does not say.
+		$found_items = null;
+		$per_page    = (int) ( $query_opts['posts_per_page'] ?? ( $options['items_count'] ?? 0 ) );
+
 		if ( $is_images || $is_social ) {
 			if ( isset( $query_opts['max_num_pages'] ) ) {
 				$found_pages = (int) $query_opts['max_num_pages'];
@@ -710,17 +836,31 @@ class Visual_Portfolio_Get {
 			} else {
 				$max_pages = $start_page;
 			}
+
+			if ( isset( $query_opts['found_posts'] ) ) {
+				$found_items = (int) $query_opts['found_posts'];
+			}
 		} elseif ( $custom_query ) {
 			// Use custom query object provided by extensions.
 			$portfolio_query = $custom_query;
 			$found_pages     = (int) $portfolio_query->max_num_pages;
 			$max_pages       = $found_pages < $start_page ? $start_page : $found_pages;
+
+			if ( isset( $portfolio_query->found_posts ) ) {
+				$found_items = (int) $portfolio_query->found_posts;
+			}
+		} elseif ( ! empty( $options['is_loop'] ) && 'taxonomies' === $options['content_source'] ) {
+			// No extension answers for the source, and the query below would
+			// list Portfolio posts in its place. A loop shows its No Results.
+			$max_pages   = $start_page;
+			$found_items = 0;
 		} else {
 			// get Post List.
 			$portfolio_query = new WP_Query( $query_opts );
 
 			$found_pages = (int) $portfolio_query->max_num_pages;
 			$max_pages   = $found_pages < $start_page ? $start_page : $found_pages;
+			$found_items = (int) $portfolio_query->found_posts;
 
 			// `max_num_pages` counts every post the query matched, and an
 			// offset is not part of that count, so a gallery that skips the
@@ -742,6 +882,7 @@ class Visual_Portfolio_Get {
 				$reachable   = (int) ceil( max( 0, (int) $portfolio_query->found_posts - $offset ) / $per_page );
 				$found_pages = min( $found_pages, $reachable );
 				$max_pages   = max( $start_page, min( $max_pages, $reachable ) );
+				$found_items = max( 0, $found_items - $offset );
 			}
 		}
 
@@ -752,6 +893,10 @@ class Visual_Portfolio_Get {
 		if ( $max_pages_limit ) {
 			$max_pages   = min( $max_pages, $max_pages_limit );
 			$found_pages = min( $found_pages, $max_pages_limit );
+
+			if ( null !== $found_items && $per_page > 0 ) {
+				$found_items = min( $found_items, $max_pages_limit * $per_page );
+			}
 		}
 
 		$next_page_url = ( ! $max_pages || $max_pages >= $start_page + 1 ) ? self::get_pagenum_link(
@@ -766,6 +911,8 @@ class Visual_Portfolio_Get {
 			'portfolio_query' => $portfolio_query,
 			'max_pages'       => $max_pages,
 			'found_pages'     => $found_pages,
+			'found_items'     => $found_items,
+			'per_page'        => $per_page,
 			'start_page'      => $start_page,
 			'next_page_url'   => $next_page_url,
 		);
@@ -854,18 +1001,24 @@ class Visual_Portfolio_Get {
 					}
 				}
 
+				$image_id = intval( $img['id'] ?? 0 );
+
+				// An image outside the Media Library, inserted from a URL, has its
+				// address and nothing to look it up by.
+				$image_url = $image_id ? '' : (string) ( $img['imgUrl'] ?? '' );
+
 				$args = array_merge(
 					$each_item_args,
 					array(
 						'uid'            => isset( $img['uid'] ) && $img['uid'] ? $img['uid'] : '',
-						'url'            => isset( $img['url'] ) && $img['url'] ? $img['url'] : Visual_Portfolio_Images::wp_get_attachment_image_url( $img['id'], $img_size_popup ),
+						'url'            => isset( $img['url'] ) && $img['url'] ? $img['url'] : ( $image_id ? Visual_Portfolio_Images::wp_get_attachment_image_url( $image_id, $img_size_popup ) : $image_url ),
 						'title'          => isset( $img['title'] ) && $img['title'] ? $img['title'] : '',
 						'alt'            => isset( $img['alt'] ) ? $img['alt'] : '',
 						'content'        => isset( $img['description'] ) && $img['description'] ? $img['description'] : '',
 						'format'         => isset( $img['format'] ) && $img['format'] ? $img['format'] : 'standard',
 						'published_time' => isset( $img['published_time'] ) && $img['published_time'] ? $img['published_time'] : '',
 						'filter'         => implode( ',', $filter_values ),
-						'image_id'       => intval( $img['id'] ),
+						'image_id'       => $image_id,
 						'focal_point'    => isset( $img['focalPoint'] ) && $img['focalPoint'] ? $img['focalPoint'] : '',
 						'allow_popup'    => ! isset( $img['url'] ) || ! $img['url'],
 						'categories'     => $categories,
@@ -873,6 +1026,12 @@ class Visual_Portfolio_Get {
 						'author_url'     => isset( $img['author'] ) && isset( $img['author_url'] ) && $img['author'] && $img['author_url'] ? $img['author_url'] : '',
 					)
 				);
+
+				if ( '' !== $image_url ) {
+					$args['image_url']    = $image_url;
+					$args['image_width']  = intval( $img['width'] ?? 0 );
+					$args['image_height'] = intval( $img['height'] ?? 0 );
+				}
 
 				// Excerpt.
 				if ( ! empty( $args['opts']['show_excerpt'] ) ) {
@@ -948,6 +1107,9 @@ class Visual_Portfolio_Get {
 						'content'        => get_the_content(),
 						'format'         => get_post_format() ? get_post_format() : 'standard',
 						'published_time' => get_the_date( 'Y-m-d H:i:s', $the_post ),
+						// Only an edit after publishing counts, as the core Post
+						// Date block counts it.
+						'modified_time'  => get_the_modified_date( 'U', $the_post ) > get_the_date( 'U', $the_post ) ? get_the_modified_date( 'Y-m-d H:i:s', $the_post ) : '',
 						'filter'         => implode( ',', $filter_values ),
 						'image_id'       => 'attachment' === $post_type ? get_the_ID() : get_post_thumbnail_id( get_the_ID() ),
 						'focal_point'    => Visual_Portfolio_Custom_Post_Meta::get_featured_image_focal_point( get_the_ID() ),
@@ -1032,6 +1194,7 @@ class Visual_Portfolio_Get {
 			'format'            => '',
 			'published'         => '',
 			'published_time'    => '',
+			'modified_time'     => '',
 			'categories'        => array(),
 			'filter'            => '',
 			'video'             => '',
@@ -1133,6 +1296,10 @@ class Visual_Portfolio_Get {
 			$options['pagination'] = 'paged';
 		}
 
+		// Tells the query filters a loop from a classic gallery, whose options
+		// are otherwise the same.
+		$options['is_loop'] = true;
+
 		/**
 		 * Fires before the loop items are resolved.
 		 *
@@ -1161,7 +1328,7 @@ class Visual_Portfolio_Get {
 		/**
 		 * Filters the resolved loop items.
 		 *
-		 * @param array $result  items, max_pages, start_page and options.
+		 * @param array $result  items, max_pages, found_items, per_page, start_page and options.
 		 * @param array $options portfolio options.
 		 */
 		// The count the query really found, not the one floored to the page that
@@ -1171,10 +1338,12 @@ class Visual_Portfolio_Get {
 		$result = apply_filters(
 			'vpf_loop_items',
 			array(
-				'items'      => $items,
-				'max_pages'  => max( 1, (int) $query['found_pages'] ),
-				'start_page' => $query['start_page'],
-				'options'    => $options,
+				'items'       => $items,
+				'max_pages'   => max( 1, (int) $query['found_pages'] ),
+				'found_items' => $query['found_items'],
+				'per_page'    => $query['per_page'],
+				'start_page'  => $query['start_page'],
+				'options'     => $options,
 			),
 			$options
 		);
@@ -1365,7 +1534,8 @@ class Visual_Portfolio_Get {
 
 			if ( is_array( $items ) && ! empty( $items ) ) {
 				foreach ( $items as $item_args ) {
-					$slider_thumbnails[] = $item_args['image_id'];
+					// An image outside the Media Library is named by its address.
+					$slider_thumbnails[] = $item_args['image_id'] ? $item_args['image_id'] : ( $item_args['image_url'] ?? 0 );
 				}
 			}
 
@@ -1593,6 +1763,7 @@ class Visual_Portfolio_Get {
 		}
 
 		$options['items_count'] = $items_count;
+		$options['is_loop']     = true;
 
 		$query_opts = self::get_query_params( $options, false, false, $query_id );
 
@@ -1620,6 +1791,11 @@ class Visual_Portfolio_Get {
 
 		if ( $custom_query ) {
 			return isset( $custom_query->max_num_pages ) ? max( 1, (int) $custom_query->max_num_pages ) : 1;
+		}
+
+		// Nothing answered for the source, see `resolve_query()`.
+		if ( 'taxonomies' === $content_source ) {
+			return 1;
 		}
 
 		// Everything left over is a `WP_Query`, which is what `resolve_query()`
@@ -1760,9 +1936,12 @@ class Visual_Portfolio_Get {
 			'none' !== $description_source ||
 			in_array( $order_by, array( 'image_title', 'image_caption', 'image_alt', 'image_description' ), true );
 
-		$images_ids = array();
-		foreach ( $images as $img ) {
-			$images_ids[] = (int) $img['id'];
+		// An image inserted from a URL has no attachment to read.
+		$images_ids = array_filter( array_map( 'intval', array_column( $images, 'id' ) ) );
+
+		// An empty `post__in` would find every attachment of the site.
+		if ( empty( $images_ids ) ) {
+			return $images;
 		}
 
 		// Find all used attachments.
@@ -1781,7 +1960,7 @@ class Visual_Portfolio_Get {
 
 		// prepare titles and descriptions.
 		foreach ( $images as $k => $img ) {
-			$attachment = $all_attachments[ (int) $img['id'] ] ?? false;
+			$attachment = $all_attachments[ (int) ( $img['id'] ?? 0 ) ] ?? false;
 
 			// Nothing to take the data from once the attachment is deleted.
 			if ( ! $attachment ) {
@@ -1850,6 +2029,23 @@ class Visual_Portfolio_Get {
 	 * @return array
 	 */
 	public static function get_query_params( $options, $for_filter = false, $layout_id = false, $query_id = null ) {
+		// Handed over rather than applied, see `supports_loop_search()`. A filter
+		// list asks for it too: its terms follow the searched items.
+		$search = self::get_current_search( $options, $query_id );
+
+		if ( '' !== $search ) {
+			$options['loop_search'] = $search;
+		}
+
+		// Read from the parameter of the gallery that asks, `vp_sort` for a
+		// classic one and `vp-{id}-sort` for a loop. Handed over for the
+		// sources that sort in their own query.
+		$active_sort = self::get_current_sort( $query_id );
+
+		if ( '' !== $active_sort ) {
+			$options['active_sort'] = $active_sort;
+		}
+
 		$options    = apply_filters( 'vpf_extend_options_before_query_args', $options, $layout_id );
 		$query_opts = array();
 		$is_images  = 'images' === $options['content_source'];
@@ -1857,7 +2053,6 @@ class Visual_Portfolio_Get {
 		// The state this query is narrowed by. A filter list asks for the
 		// unnarrowed query, so it never reads the active filter.
 		$active_filter = $for_filter ? false : self::get_filter_active_item( $query_opts, $query_id );
-		$active_sort   = self::get_current_sort( $query_id );
 
 		$paged = 0;
 		if ( isset( $options['pagination'] ) && $options['pagination'] ) {
@@ -1874,7 +2069,7 @@ class Visual_Portfolio_Get {
 
 			// add unique IDs.
 			foreach ( $options['images'] as $k => $img ) {
-				$options['images'][ $k ]['uid'] = hash( 'crc32b', 'image-' . $k . $img['id'] );
+				$options['images'][ $k ]['uid'] = hash( 'crc32b', 'image-' . $k . ( $img['id'] ?? '' ) );
 			}
 
 			if ( $count < 0 ) {
@@ -1994,6 +2189,9 @@ class Visual_Portfolio_Get {
 			} else {
 				$query_opts['max_num_pages'] = 0;
 			}
+
+			// Named as `WP_Query` names it, for the count a loop shows.
+			$query_opts['found_posts'] = count( $images );
 
 			$start_from_item = ( $paged - 1 ) * $count;
 			$end_on_item     = $start_from_item + $count;
@@ -2131,12 +2329,7 @@ class Visual_Portfolio_Get {
 
 					// Taxonomies.
 					if ( ! empty( $options['posts_taxonomies'] ) && ! isset( $query_opts['tax_query'] ) ) {
-						$terms_list = get_terms(
-							get_object_taxonomies( is_array( $query_opts['post_type'] ) ? $query_opts['post_type'] : array( $query_opts['post_type'] ) ),
-							array(
-								'hide_empty' => false,
-							)
-						);
+						$type_taxonomies = get_object_taxonomies( is_array( $query_opts['post_type'] ) ? $query_opts['post_type'] : array( $query_opts['post_type'] ) );
 
                         // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 						$query_opts['tax_query'] = array(
@@ -2153,14 +2346,11 @@ class Visual_Portfolio_Get {
 						}
 
 						foreach ( $options['posts_taxonomies'] as $taxonomy ) {
-							$taxonomy_name = null;
-
-							foreach ( $terms_list as $term ) {
-								if ( $term->term_id === (int) $taxonomy ) {
-									$taxonomy_name = $term->taxonomy;
-									continue;
-								}
-							}
+							// The selected term alone, not every term of the post
+							// type's taxonomies, which a site with thousands of
+							// tags pays for on every render.
+							$term          = get_term( (int) $taxonomy );
+							$taxonomy_name = $term instanceof WP_Term && ( empty( $type_taxonomies ) || in_array( $term->taxonomy, $type_taxonomies, true ) ) ? $term->taxonomy : null;
 
 							if ( $taxonomy_name ) {
 								$query_opts['tax_query'][] = array(
@@ -2176,6 +2366,112 @@ class Visual_Portfolio_Get {
 					if ( isset( $options['posts_offset'] ) && $options['posts_offset'] ) {
 						$query_opts['offset'] = $options['posts_offset'] + ( $paged - 1 ) * $count;
 					}
+
+					// Excluded terms and formats, joined to the taxonomies above
+					// by AND, the way the core Query block joins them.
+					$narrow_tax_query = array();
+
+					if ( ! empty( $options['posts_excluded_taxonomies'] ) ) {
+						$excluded = array();
+
+						foreach ( (array) $options['posts_excluded_taxonomies'] as $term_id ) {
+							$term = get_term( (int) $term_id );
+
+							if ( $term instanceof WP_Term ) {
+								$excluded[ $term->taxonomy ][] = $term->term_id;
+							}
+						}
+
+						foreach ( $excluded as $taxonomy_name => $term_ids ) {
+							$narrow_tax_query[] = array(
+								'taxonomy' => $taxonomy_name,
+								'field'    => 'term_id',
+								'terms'    => $term_ids,
+								'operator' => 'NOT IN',
+							);
+						}
+					}
+
+					// Only where a queried post type has formats: a set that lost
+					// them keeps the saved choice without narrowing to nothing.
+					$format_types = 'post_types_set' === $options['posts_source'] ? (array) ( $options['post_types_set'] ?? array() ) : array( $options['posts_source'] );
+					$has_formats  = false;
+
+					foreach ( $format_types as $format_type ) {
+						$has_formats = $has_formats || post_type_supports( $format_type, 'post-formats' );
+					}
+
+					if ( $has_formats && ! empty( $options['posts_formats'] ) ) {
+						$formats       = array_intersect( (array) $options['posts_formats'], get_post_format_slugs() );
+						$formats_query = array( 'relation' => 'OR' );
+
+						// `standard` is stored as no format at all.
+						if ( in_array( 'standard', $formats, true ) ) {
+							$formats_query[] = array(
+								'taxonomy' => 'post_format',
+								'operator' => 'NOT EXISTS',
+							);
+						}
+
+						$formats = array_diff( $formats, array( 'standard' ) );
+
+						if ( ! empty( $formats ) ) {
+							$formats_query[] = array(
+								'taxonomy' => 'post_format',
+								'field'    => 'slug',
+								'terms'    => array_values(
+									array_map(
+										function ( $format ) {
+											return 'post-format-' . $format;
+										},
+										$formats
+									)
+								),
+							);
+						}
+
+						if ( 1 < count( $formats_query ) ) {
+							$narrow_tax_query[] = $formats_query;
+						}
+					}
+
+					if ( ! empty( $narrow_tax_query ) ) {
+                        // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+						$query_opts['tax_query'] = array_merge(
+							array( 'relation' => 'AND' ),
+							isset( $query_opts['tax_query'] ) ? array( $query_opts['tax_query'] ) : array(),
+							$narrow_tax_query
+						);
+					}
+
+					// WordPress pins only posts, so the other post types have
+					// no sticky choice. Include, the default, is no key.
+					if ( 'post' === $options['posts_source'] && ! empty( $options['posts_sticky'] ) ) {
+						$sticky = array_map( 'absint', (array) get_option( 'sticky_posts' ) );
+
+						switch ( $options['posts_sticky'] ) {
+							case 'ignore':
+								$query_opts['ignore_sticky_posts'] = true;
+								break;
+
+							case 'exclude':
+								$query_opts['post__not_in'] = array_merge( (array) ( $query_opts['post__not_in'] ?? array() ), $sticky );
+								break;
+
+							case 'only':
+								// An empty `post__in` finds every post.
+								$query_opts['post__in']            = empty( $sticky ) ? array( 0 ) : $sticky;
+								$query_opts['ignore_sticky_posts'] = true;
+								break;
+						}
+					}
+				}
+
+				// Every posts source, as Pro applied it before the setting came
+				// here: a classic gallery may narrow a manual selection or a
+				// custom query by author. The loop offers it where core does.
+				if ( ! empty( $options['posts_authors'] ) ) {
+					$query_opts['author__in'] = array_map( 'intval', (array) $options['posts_authors'] );
 				}
 
 				// Narrow the query the way the Filters panel asks.
@@ -2217,10 +2513,18 @@ class Visual_Portfolio_Get {
 
 					$not_id                     = (array) ( isset( $query_opts['post__not_in'] ) ? $query_opts['post__not_in'] : array() );
 					$query_opts['post__not_in'] = array_merge( $not_id, $used );
+				}
 
-					// Remove posts from post__in.
-					if ( isset( $query_opts['post__in'] ) ) {
-						$query_opts['post__in'] = array_diff( (array) $query_opts['post__in'], (array) $query_opts['post__not_in'] );
+				// WordPress reads `post__not_in` only without a `post__in`, so a
+				// list of posts, a manual selection or the sticky posts, drops
+				// the excluded ones itself. A list left empty stays empty rather
+				// than finding every post. An empty `post__in`, which the main
+				// query hands a current query, lists nothing to narrow.
+				if ( ! empty( $query_opts['post__in'] ) ) {
+					$query_opts['post__in'] = array_values( array_diff( (array) $query_opts['post__in'], (array) ( $query_opts['post__not_in'] ?? array() ) ) );
+
+					if ( empty( $query_opts['post__in'] ) ) {
+						$query_opts['post__in'] = array( 0 );
 					}
 				}
 			}
@@ -2658,7 +2962,9 @@ class Visual_Portfolio_Get {
 			$active_item = sanitize_text_field( wp_unslash( $_GET[ $name ] ?? $query_opts['vp_filter'] ) );
 		}
 
-		return $active_item;
+		// An empty value is what a filter dropdown submits for "All" without
+		// JavaScript, and an image gallery would look for items in no category.
+		return '' === $active_item ? false : $active_item;
 	}
 
 	/**
@@ -2983,7 +3289,11 @@ class Visual_Portfolio_Get {
 			);
 		}
 
-		$args['image'] = Visual_Portfolio_Images::get_attachment_image( $args['image_id'], $args['img_size'], false, $image_attrs );
+		if ( empty( $args['image_id'] ) && ! empty( $args['image_url'] ) ) {
+			$args['image'] = Visual_Portfolio_Images::get_remote_image( $args['image_url'], $image_attrs, $args['image_width'], $args['image_height'] );
+		} else {
+			$args['image'] = Visual_Portfolio_Images::get_attachment_image( $args['image_id'], $args['img_size'], false, $image_attrs );
+		}
 
 		// prepare date.
 		if ( isset( $args['opts']['show_date'] ) ) {
@@ -3121,6 +3431,17 @@ class Visual_Portfolio_Get {
 	 * @param array $args - item args.
 	 */
 	private static function item_popup_data( $args ) {
+		echo self::get_item_popup_output( $args ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- passed through wp_kses there.
+	}
+
+	/**
+	 * Item popup data, the `<template>` the lightbox reads an item from.
+	 *
+	 * @param array $args - item args.
+	 *
+	 * @return string
+	 */
+	public static function get_item_popup_output( $args ) {
 		$popup_image  = false;
 		$popup_video  = false;
 		$popup_output = false;
@@ -3143,7 +3464,7 @@ class Visual_Portfolio_Get {
 
 		$popup_output = apply_filters( 'vpf_popup_output', $popup_output, $args );
 
-		echo wp_kses( $popup_output, 'vp_popup' );
+		return wp_kses( (string) $popup_output, 'vp_popup' );
 	}
 
 	/**
@@ -3154,6 +3475,39 @@ class Visual_Portfolio_Get {
 	 * @return array|bool
 	 */
 	public static function get_popup_image( $img_id, $args ) {
+		// An image outside the Media Library comes in one size, and a size of 0
+		// is measured by the lightbox once the image loads.
+		if ( empty( $args['image_id'] ) && ! empty( $args['image_url'] ) ) {
+			$width  = (int) ( $args['image_width'] ?? 0 );
+			$height = (int) ( $args['image_height'] ?? 0 );
+
+			return apply_filters(
+				'vpf_popup_image_data',
+				array(
+					'id'               => 0,
+					'title'            => $args['title'],
+					'description'      => $args['content'],
+					'caption'          => '',
+					'alt'              => trim( (string) ( $args['alt'] ?? '' ) ),
+					'url'              => $args['image_url'],
+					'srcset'           => '',
+					'width'            => $width,
+					'height'           => $height,
+					'md_url'           => $args['image_url'],
+					'md_width'         => $width,
+					'md_height'        => $height,
+					'sm_url'           => $args['image_url'],
+					'sm_width'         => $width,
+					'sm_height'        => $height,
+					'item_title'       => $args['title'],
+					'item_description' => $args['content'],
+					'item_excerpt'     => self::get_item_excerpt( $args ),
+					'item_author'      => $args['author'],
+					'item_author_url'  => $args['author_url'],
+				)
+			);
+		}
+
 		$popup_image = false;
 		if ( $img_id ) {
 			$attachment = get_post( $args['image_id'] );
@@ -3235,7 +3589,7 @@ class Visual_Portfolio_Get {
 	public static function get_popup_video( $args ) {
 		return array(
 			'url'              => $args['format_video_url'],
-			'poster'           => wp_get_attachment_image_url( $args['image_id'], 'full' ),
+			'poster'           => empty( $args['image_id'] ) && ! empty( $args['image_url'] ) ? $args['image_url'] : wp_get_attachment_image_url( $args['image_id'], 'full' ),
 			'item_title'       => $args['title'] ?? null,
 			'item_description' => $args['content'] ?? null,
 			'item_excerpt'     => self::get_item_excerpt( $args ),
@@ -3451,13 +3805,37 @@ class Visual_Portfolio_Get {
 	/**
 	 * Get pagination links.
 	 *
-	 * @param array           $args - Block Arguments.
+	 * @param array           $args - Block Arguments. `page_link`, the link to page 999999999, stands in for the one built here.
 	 * @param array           $vp_options - Block Options.
 	 * @param int|string|null $query_id - id of the loop the pagination belongs to, or null for the legacy parameters.
 	 *
 	 * @return array
 	 */
 	public static function get_pagination_links( $args, $vp_options, $query_id = null ) {
+		// `paginate_links()` adds the query string of the current URL to every
+		// link. A link the caller built already carries what it means to, and
+		// the rest would bring a stale page along: the portfolio archive keeps
+		// its page in the path, and a page parameter left in the URL would
+		// follow every link.
+		$own_args = null;
+
+		if ( isset( $args['page_link'] ) ) {
+			$base_args = array();
+
+			wp_parse_str( (string) wp_parse_url( $args['page_link'], PHP_URL_QUERY ), $base_args );
+
+			$own_args = static function ( $link ) use ( $base_args ) {
+				$link_args = array();
+
+				wp_parse_str( (string) wp_parse_url( $link, PHP_URL_QUERY ), $link_args );
+
+				return remove_query_arg( array_keys( array_diff_key( $link_args, $base_args ) ), $link );
+			};
+
+			// First, so a link another filter extends keeps what it adds.
+			add_filter( 'paginate_links', $own_args, PHP_INT_MIN );
+		}
+
 		$pagination_links = paginate_links(
 			array(
 				'base'      => esc_url_raw(
@@ -3466,7 +3844,7 @@ class Visual_Portfolio_Get {
 						'%#%',
 						remove_query_arg(
 							'add-to-cart',
-							self::get_pagenum_link(
+							$args['page_link'] ?? self::get_pagenum_link(
 								array(
 									'vp_page' => 999999999,
 								),
@@ -3485,6 +3863,10 @@ class Visual_Portfolio_Get {
 				'mid_size'  => $args['mid_size'] ?? 2,
 			)
 		);
+
+		if ( $own_args ) {
+			remove_filter( 'paginate_links', $own_args, PHP_INT_MIN );
+		}
 
 		// parse html string and make arrays.
 		$filtered_links = array();
@@ -3571,7 +3953,7 @@ class Visual_Portfolio_Get {
 	 * Return current page url with paged support.
 	 *
 	 * Arguments are always named after the legacy parameters (`vp_page`,
-	 * `vp_filter`, `vp_sort`). With a query id they are written under the names
+	 * `vp_filter`, `vp_sort`, `vp_search`). With a query id they are written under the names
 	 * of that loop instead, so every caller builds a link the same way and only
 	 * the loop decides which parameters it owns. Parameters of other loops are
 	 * part of the current URL and survive untouched.
@@ -3587,6 +3969,7 @@ class Visual_Portfolio_Get {
 		$names = array(
 			'vp_filter' => self::get_query_var_name( 'filter', $query_id ),
 			'vp_sort'   => self::get_query_var_name( 'sort', $query_id ),
+			'vp_search' => self::get_query_var_name( 'search', $query_id ),
 			'vp_page'   => self::get_query_var_name( 'page', $query_id ),
 		);
 
@@ -3600,9 +3983,9 @@ class Visual_Portfolio_Get {
 			$query_arg = $renamed;
 		}
 
-		// An empty filter or sort, and the first page, are the default state -
-		// they are dropped from the URL rather than written into it.
-		foreach ( array( 'vp_filter', 'vp_sort' ) as $legacy_name ) {
+		// An empty filter, sort or search, and the first page, are the default
+		// state - they are dropped from the URL rather than written into it.
+		foreach ( array( 'vp_filter', 'vp_sort', 'vp_search' ) as $legacy_name ) {
 			$name = $names[ $legacy_name ];
 
 			if ( isset( $query_arg[ $name ] ) && ! $query_arg[ $name ] ) {

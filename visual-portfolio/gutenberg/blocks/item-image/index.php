@@ -39,8 +39,8 @@ class Visual_Portfolio_Block_Item_Image {
 	 * Inline styles of the image itself.
 	 *
 	 * Cropping happens on the `img`, not on the figure: the aspect ratio, or a
-	 * width and a height, are the box, and `object-fit` with the focal point
-	 * decide what of the image survives it.
+	 * height, are the box, and `object-fit` with the focal point decide what
+	 * of the image survives it. A width is the figure's, see `block_render()`.
 	 *
 	 * @param array $attributes  - block attributes.
 	 * @param mixed $focal_point - focal point of the item, `array( 'x', 'y' )` or empty.
@@ -74,10 +74,6 @@ class Visual_Portfolio_Block_Item_Image {
 			$styles[] = 'height:auto';
 		}
 
-		if ( '' !== $width ) {
-			$styles[] = $width;
-		}
-
 		$styles[] = 'object-fit:' . $scale;
 
 		if ( isset( $focal_point['x'], $focal_point['y'] ) ) {
@@ -105,7 +101,16 @@ class Visual_Portfolio_Block_Item_Image {
 	 * @return string
 	 */
 	private function get_click_wrapper( $image, $attributes, $context ) {
-		$action = $attributes['clickAction'] ?? 'none';
+		list( $action, $extension ) = Visual_Portfolio_Popup::resolve_click_action( $attributes['clickAction'] ?? 'none', $context );
+
+		if ( $extension ) {
+			return sprintf(
+				'<a%1$s%2$s>%3$s</a>',
+				Visual_Portfolio_Popup::get_attributes_html( $extension ),
+				empty( $context['vp/itemAriaLabel'] ) ? '' : ' aria-label="' . esc_attr( $context['vp/itemAriaLabel'] ) . '"',
+				$image
+			);
+		}
 
 		if ( 'url' === $action && ! empty( $context['vp/itemUrl'] ) ) {
 			return sprintf(
@@ -124,16 +129,9 @@ class Visual_Portfolio_Block_Item_Image {
 
 		$trigger = Visual_Portfolio_Popup::get_trigger_attributes( $context );
 
-		// An item the lightbox has nothing to show - a Pro source that refused
-		// it, an image that no longer exists - is not made clickable.
-		if ( empty( $trigger ) ) {
-			return $image;
-		}
-
 		return sprintf(
-			'<a href="%1$s" data-vp-popup="%2$s"%3$s>%4$s</a>',
+			'<a href="%1$s" data-vp-popup%2$s>%3$s</a>',
 			esc_url( $trigger['href'] ),
-			esc_attr( $trigger['data-vp-popup'] ),
 			empty( $context['vp/itemAriaLabel'] ) ? '' : ' aria-label="' . esc_attr( $context['vp/itemAriaLabel'] ) . '"',
 			$image
 		);
@@ -175,12 +173,29 @@ class Visual_Portfolio_Block_Item_Image {
 		// image, and it is where the Pro sources hook their remote images in.
 		if ( $img_id ) {
 			$image = Visual_Portfolio_Images::get_attachment_image( $img_id, $size, false, $img_attr );
+		} elseif ( ! empty( $context['vp/itemImgUrl'] ) ) {
+			$image = Visual_Portfolio_Images::get_remote_image( $context['vp/itemImgUrl'], $img_attr, $context['vp/itemImgWidth'] ?? 0, $context['vp/itemImgHeight'] ?? 0 );
 		}
 
 		// The global No Image fallback of the plugin settings.
 		if ( ! $image && ! empty( $context['vp/itemNoImgId'] ) ) {
 			$image = Visual_Portfolio_Images::get_attachment_image( $context['vp/itemNoImgId'], $size, false, $img_attr );
 		}
+
+		/**
+		 * Filters the picture of a loop item block, before its overlay and link.
+		 *
+		 * Where media beside the image goes, such as the Pro hover image and
+		 * video thumbnail. An item with no image comes in empty and may leave
+		 * with a picture, which takes the block's crop from `$img_attr`.
+		 *
+		 * @param string $image      picture markup, empty for an item without an image.
+		 * @param array  $context    block context of the item.
+		 * @param array  $attributes block attributes.
+		 * @param string $block_name `visual-portfolio/item-image` or `visual-portfolio/item-cover`.
+		 * @param array  $img_attr   attributes the block gives its `img`: class, style, loading.
+		 */
+		$image = apply_filters( 'vpf_loop_item_picture', $image, $context, $attributes, 'visual-portfolio/item-image', $img_attr );
 
 		// An item without an image renders nothing at all - an empty item is a
 		// valid gallery item.
@@ -206,7 +221,18 @@ class Visual_Portfolio_Block_Item_Image {
 		);
 		$image  = $this->get_click_wrapper( $image, $attributes, $context );
 
-		return sprintf( '<figure %1$s>%2$s</figure>', get_block_wrapper_attributes(), $image );
+		// Beside the link rather than in it: the link is named by its label, and
+		// the badge names the format on its own.
+		if ( ! empty( $attributes['showFormatBadge'] ) ) {
+			$image .= visual_portfolio_get_item_format_badge( $context['vp/itemFormat'] ?? '', $attributes['formatBadgePosition'] ?? '' );
+		}
+
+		// The width goes on the figure, the way core's Featured Image sets it,
+		// so the overlay, the badge and the wrappers of the picture are as wide
+		// as the picture rather than the column.
+		$width = empty( $attributes['width'] ) ? '' : safecss_filter_attr( 'width:' . $attributes['width'] );
+
+		return sprintf( '<figure %1$s>%2$s</figure>', get_block_wrapper_attributes( '' === $width ? array() : array( 'style' => $width ) ), $image );
 	}
 }
 new Visual_Portfolio_Block_Item_Image();

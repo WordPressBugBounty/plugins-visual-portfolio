@@ -32,7 +32,14 @@ import classnames from 'classnames/dedupe';
 /**
  * Internal dependencies
  */
+import { getMissingTeasers } from '../../components/pro-teaser';
+import { followsLink, getClickActions } from '../../utils/click-actions';
 import { AspectRatioTool, ScaleTool } from '../../utils/dimensions-tools';
+import {
+	FORMAT_BADGE_DEFAULTS,
+	FormatBadgeSettings,
+	ItemFormatBadge,
+} from '../../utils/item-format-badge';
 import {
 	useImageSizeOnInsert,
 	useImageSizeOptions,
@@ -50,6 +57,35 @@ import {
 	getResetAllValues,
 	useToolsPanelDropdownMenuProps,
 } from '../../utils/tools-panel';
+import {
+	getDrawnEffect,
+	getEffectSelectOptions,
+	IMAGE_EFFECT_TEASERS,
+} from './effects';
+
+// The cover settings Pro adds, for an install without them.
+const PRO_SETTINGS = [
+	{
+		name: 'moveUnderImage',
+		label: __('Move under image', 'visual-portfolio'),
+		line: __(
+			'Draw the content below the picture under a screen width you choose.',
+			'visual-portfolio'
+		),
+		campaign: 'teaser_cover_move_under_image',
+	},
+	...IMAGE_EFFECT_TEASERS,
+	{
+		name: 'emergeSkew',
+		label: __('Skew', 'visual-portfolio'),
+		line: __(
+			'How far the edge of the emerging panel slants.',
+			'visual-portfolio'
+		),
+		campaign: 'teaser_emerge_skew',
+		shows: (attributes) => 'emerge' === attributes.effect,
+	},
+];
 
 const ALLOWED_BLOCKS = [
 	'visual-portfolio/item-title',
@@ -71,24 +107,11 @@ const TEMPLATE = [
 	],
 ];
 
-const EFFECT_OPTIONS = [
-	{ label: __('None', 'visual-portfolio'), value: 'none' },
-	{ label: __('Fade', 'visual-portfolio'), value: 'fade' },
-	{ label: __('Fly', 'visual-portfolio'), value: 'fly' },
-	{ label: __('Emerge', 'visual-portfolio'), value: 'emerge' },
-];
-
 // The three states the legacy gallery offers, in its own order.
 const SHOW_CONTENT_OPTIONS = [
 	{ label: __('On hover', 'visual-portfolio'), value: 'hover' },
 	{ label: __('Except on hover', 'visual-portfolio'), value: 'default' },
 	{ label: __('Always', 'visual-portfolio'), value: 'always' },
-];
-
-const CLICK_ACTION_OPTIONS = [
-	{ label: __('None', 'visual-portfolio'), value: 'none' },
-	{ label: __('Open the item', 'visual-portfolio'), value: 'url' },
-	{ label: __('Open the lightbox', 'visual-portfolio'), value: 'popup' },
 ];
 
 // The nine positions of core Cover, under the class names core gives them.
@@ -117,6 +140,7 @@ const DEFAULT_ATTRIBUTES = {
 	clickAction: 'none',
 	linkTarget: '_self',
 	rel: '',
+	...FORMAT_BADGE_DEFAULTS,
 };
 
 export default function ItemCoverEdit({
@@ -140,6 +164,8 @@ export default function ItemCoverEdit({
 		linkTarget,
 		rel,
 		style,
+		showFormatBadge,
+		formatBadgePosition,
 	} = attributes;
 
 	const {
@@ -147,6 +173,7 @@ export default function ItemCoverEdit({
 		'vp/itemImgAlt': itemImgAlt,
 		'vp/itemImageSizes': itemImageSizes,
 		'vp/itemFocalPoint': itemFocalPoint,
+		'vp/itemFormat': itemFormat,
 		'vp/layoutColumns': layoutColumns,
 	} = context;
 
@@ -190,10 +217,14 @@ export default function ItemCoverEdit({
 		setAttributes,
 		clientId,
 	});
+	const teasers = getMissingTeasers(extraSettings, PRO_SETTINGS, {
+		withPanelId: true,
+		attributes,
+	});
 
 	const blockProps = useBlockProps({
 		className: classnames(
-			`vp-effect-${effect}`,
+			`vp-effect-${getDrawnEffect(effect)}`,
 			`vp-show-content-${showContent}`,
 			CONTENT_POSITION_CLASSES[contentPosition]
 		),
@@ -368,7 +399,7 @@ export default function ItemCoverEdit({
 										'visual-portfolio'
 									)}
 									value={effect}
-									options={EFFECT_OPTIONS}
+									options={getEffectSelectOptions()}
 									onChange={(value) =>
 										setAttributes({ effect: value })
 									}
@@ -462,13 +493,13 @@ export default function ItemCoverEdit({
 										'visual-portfolio'
 									)}
 									value={clickAction}
-									options={CLICK_ACTION_OPTIONS}
+									options={getClickActions()}
 									onChange={(value) =>
 										setAttributes({ clickAction: value })
 									}
 								/>
 							</ToolsPanelItem>
-							{'url' === clickAction && (
+							{followsLink(clickAction) && (
 								<>
 									<ToolsPanelItem
 										label={__(
@@ -522,14 +553,21 @@ export default function ItemCoverEdit({
 									</ToolsPanelItem>
 								</>
 							)}
-							{extraSettings.map(({ name, Item }) => (
-								<Item
-									key={name}
-									attributes={attributes}
-									setAttributes={setAttributes}
-									clientId={clientId}
-								/>
-							))}
+							{[...extraSettings, ...teasers].map(
+								({ name, Item }) => (
+									<Item
+										key={name}
+										attributes={attributes}
+										setAttributes={setAttributes}
+										clientId={clientId}
+									/>
+								)
+							)}
+							<FormatBadgeSettings
+								attributes={attributes}
+								setAttributes={setAttributes}
+								panelId={clientId}
+							/>
 						</ToolsPanel>
 					</InspectorControls>
 				</>
@@ -559,6 +597,12 @@ export default function ItemCoverEdit({
 						<ItemOverlay
 							className={OVERLAY_CLASS}
 							overlay={overlay}
+						/>
+					)}
+					{showFormatBadge && (
+						<ItemFormatBadge
+							format={itemFormat}
+							position={formatBadgePosition}
 						/>
 					)}
 				</div>

@@ -90,6 +90,74 @@ export function getColumnCount(attributes) {
 	return isAutoColumns(attributes) ? count : Math.max(1, count);
 }
 
+// The screens a column count can be set for, and the attribute each one is
+// written to. The screens are the editor's own - the ones its View menu
+// previews and, with Responsive styles on, styles one at a time - and a count
+// applies where the editor showed it: at the breakpoints of
+// `getViewportBreakpoints()`, which the server turns into the media queries
+// of `vp-has-tablet-columns` and `vp-has-mobile-columns`.
+export const SCREEN_COLUMNS = [
+	{ screen: 'tablet', attribute: 'layoutColumnCountTablet' },
+	{ screen: 'mobile', attribute: 'layoutColumnCountMobile' },
+];
+
+// The widths the editor falls back to when a theme declares none.
+export const DEFAULT_VIEWPORT_BREAKPOINTS = {
+	mobile: '480px',
+	tablet: '782px',
+};
+
+// A breakpoint is a plain length: the editor writes it into a media query.
+const VIEWPORT_SIZE = /^(?:\d+|\d*\.\d+)(?:px|em|rem)$/;
+
+/**
+ * A breakpoint in pixels, for putting two of them in order.
+ *
+ * @param {string} value - breakpoint.
+ * @return {number} pixels, `em` and `rem` at the browser's 16px.
+ */
+function toPixels(value) {
+	return parseFloat(value) * (value.endsWith('px') ? 1 : 16);
+}
+
+/**
+ * The breakpoints the editor previews a tablet and a phone at.
+ *
+ * `settings.viewport` of `theme.json`, read the way the editor reads it: a
+ * plain px, em or rem length for each screen, the defaults where a theme
+ * declares nothing usable, and a tablet no wider than a phone dropped. A
+ * screen a theme leaves out is left out - the editor offers no preview of
+ * it, so there is nothing to set a count for.
+ *
+ * @param {Object} viewport - the `viewport` setting, or nothing.
+ * @return {Object} screen name to breakpoint.
+ */
+export function getViewportBreakpoints(viewport) {
+	const breakpoints = {};
+
+	Object.keys(DEFAULT_VIEWPORT_BREAKPOINTS).forEach((screen) => {
+		const value = String(viewport?.[screen] ?? '').trim();
+
+		if (VIEWPORT_SIZE.test(value)) {
+			breakpoints[screen] = value;
+		}
+	});
+
+	if (!Object.keys(breakpoints).length) {
+		return { ...DEFAULT_VIEWPORT_BREAKPOINTS };
+	}
+
+	if (
+		breakpoints.mobile &&
+		breakpoints.tablet &&
+		toPixels(breakpoints.mobile) >= toPixels(breakpoints.tablet)
+	) {
+		return { mobile: breakpoints.mobile };
+	}
+
+	return breakpoints;
+}
+
 /**
  * Classes and custom properties the layout is drawn from.
  *
@@ -98,17 +166,40 @@ export function getColumnCount(attributes) {
  *
  * @param {Object} attributes - block attributes.
  * @param {string} blockGap   - resolved block spacing, or an empty string.
+ * @param {string} rowGap     - resolved spacing between rows, or an empty string.
  * @return {{className: string, style: Object}} layout props.
  */
-export function getColumnsProps(attributes, blockGap) {
+export function getColumnsProps(attributes, blockGap, rowGap = '') {
 	const isAuto = isAutoColumns(attributes);
 	const classNames = [];
 	const style = {
 		'--vp-layout-columns': getColumnCount(attributes),
 	};
 
+	// A count of its own for a narrower screen, which only manual mode offers:
+	// in auto mode the width of a column is what decides the count.
+	if (!isAuto) {
+		SCREEN_COLUMNS.forEach(({ screen, attribute }) => {
+			const count = attributes[attribute];
+
+			if (count) {
+				classNames.push(`vp-has-${screen}-columns`);
+				style[`--vp-layout-columns-${screen}`] = count;
+			}
+		});
+	}
+
 	if (blockGap) {
-		style['--vp-layout-gap'] = blockGap;
+		// None is a bare zero, which is a number rather than a length and
+		// invalid inside the `calc()` the slide width is worked out with.
+		style['--vp-layout-gap'] = /^0(\.0+)?$/.test(blockGap)
+			? '0px'
+			: blockGap;
+	}
+
+	// Unset or the same, the rows keep the gap of the columns.
+	if (rowGap && rowGap !== blockGap) {
+		style['--vp-layout-row-gap'] = rowGap;
 	}
 
 	if (isAuto) {

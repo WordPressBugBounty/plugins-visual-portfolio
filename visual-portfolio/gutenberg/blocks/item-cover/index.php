@@ -139,12 +139,18 @@ class Visual_Portfolio_Block_Item_Cover {
 
 		if ( $img_id ) {
 			$image = Visual_Portfolio_Images::get_attachment_image( $img_id, $size, false, $img_attr );
+		} elseif ( ! empty( $context['vp/itemImgUrl'] ) ) {
+			$image = Visual_Portfolio_Images::get_remote_image( $context['vp/itemImgUrl'], $img_attr, $context['vp/itemImgWidth'] ?? 0, $context['vp/itemImgHeight'] ?? 0 );
 		}
 
 		// The global No Image fallback of the plugin settings.
 		if ( ! $image && ! empty( $context['vp/itemNoImgId'] ) ) {
 			$image = Visual_Portfolio_Images::get_attachment_image( $context['vp/itemNoImgId'], $size, false, $img_attr );
 		}
+
+		// See `vpf_loop_item_picture` in the item image block. The ratio of the
+		// cover is read off the first picture, so media added after it keeps the box.
+		$image = apply_filters( 'vpf_loop_item_picture', $image, $context, $attributes, 'visual-portfolio/item-cover', $img_attr );
 
 		// The assets walker only knows about galleries of the legacy block, so the
 		// lazy loading scripts of this one are requested here.
@@ -174,10 +180,18 @@ class Visual_Portfolio_Block_Item_Cover {
 	 * @return string
 	 */
 	private function get_trigger( $attributes, $context ) {
-		$action = $attributes['clickAction'] ?? 'none';
+		list( $action, $extension ) = Visual_Portfolio_Popup::resolve_click_action( $attributes['clickAction'] ?? 'none', $context );
 
 		// The anchor has no text of its own, so the label is not optional.
 		$aria_label = $context['vp/itemAriaLabel'] ?? '';
+
+		if ( $extension ) {
+			return sprintf(
+				'<a class="wp-block-visual-portfolio-item-cover__link"%1$s aria-label="%2$s"></a>',
+				Visual_Portfolio_Popup::get_attributes_html( $extension ),
+				esc_attr( $aria_label )
+			);
+		}
 
 		if ( 'url' === $action && ! empty( $context['vp/itemUrl'] ) ) {
 			return sprintf(
@@ -195,16 +209,9 @@ class Visual_Portfolio_Block_Item_Cover {
 
 		$trigger = Visual_Portfolio_Popup::get_trigger_attributes( $context );
 
-		// An item the lightbox has nothing to show - a Pro source that refused
-		// it, an image that no longer exists - is not made clickable.
-		if ( empty( $trigger ) ) {
-			return '';
-		}
-
 		return sprintf(
-			'<a class="wp-block-visual-portfolio-item-cover__link" href="%1$s" data-vp-popup="%2$s" aria-label="%3$s"></a>',
+			'<a class="wp-block-visual-portfolio-item-cover__link" href="%1$s" data-vp-popup aria-label="%2$s"></a>',
 			esc_url( $trigger['href'] ),
-			esc_attr( $trigger['data-vp-popup'] ),
 			esc_attr( $aria_label )
 		);
 	}
@@ -235,6 +242,24 @@ class Visual_Portfolio_Block_Item_Cover {
 		$height = (int) $processor->get_attribute( 'height' );
 
 		return $width > 0 && $height > 0 ? $width . '/' . $height : '';
+	}
+
+	/**
+	 * The effects the content of a cover can appear with.
+	 *
+	 * An effect is the class `vp-effect-` and its name on the cover, so an
+	 * effect an install adds needs a stylesheet and this filter and nothing
+	 * else.
+	 *
+	 * @return array effect names.
+	 */
+	private static function get_effects() {
+		/**
+		 * Filters the effects an item cover offers.
+		 *
+		 * @param array $effects effect names, the values of the `effect` attribute.
+		 */
+		return (array) apply_filters( 'vpf_item_cover_effects', array( 'none', 'fade', 'fly', 'emerge' ) );
 	}
 
 	/**
@@ -321,8 +346,10 @@ class Visual_Portfolio_Block_Item_Cover {
 	public function block_render( $attributes, $content, $block ) {
 		$context = $block->context;
 
+		// A Pro effect saved on a site without Pro stays in the block and is
+		// drawn as the default.
 		$effect = $attributes['effect'] ?? 'fade';
-		$effect = in_array( $effect, array( 'none', 'fade', 'fly', 'emerge' ), true ) ? $effect : 'fade';
+		$effect = in_array( $effect, self::get_effects(), true ) ? $effect : 'fade';
 
 		// The three states the legacy gallery offers, under the names it uses:
 		// hover state only, default state only, always.
@@ -357,6 +384,11 @@ class Visual_Portfolio_Block_Item_Cover {
 				'customGradient' => $attributes['customGradient'] ?? '',
 			)
 		);
+
+		// Part of the picture, so it goes wherever a stylesheet moves the picture.
+		if ( ! empty( $attributes['showFormatBadge'] ) ) {
+			$media .= visual_portfolio_get_item_format_badge( $context['vp/itemFormat'] ?? '', $attributes['formatBadgePosition'] ?? '' );
+		}
 
 		$hover_overlay = visual_portfolio_get_item_overlay(
 			self::OVERLAY_CLASS,

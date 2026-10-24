@@ -18,7 +18,6 @@
 		},
 		"clickAction": {
 			"type": "string",
-			"enum": ["none", "url", "popup"],
 			"role": "content"
 		},
 		"isLink": {
@@ -36,6 +35,10 @@
 			"type": "string",
 			"default": "_self",
 			"role": "content"
+		},
+		"extensions": {
+			"type": "object",
+			"default": {}
 		}
 	},
 	"example": {

@@ -18,7 +18,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 <div class="vp-block-loop alignwide">
 	<!-- wp:visual-portfolio/item-template {"layoutType":"grid","layoutColumnsMode":"manual","layoutColumnCount":3} -->
 		<!-- wp:visual-portfolio/item-image {"aspectRatio":"1","clickAction":"popup"} /-->
-		<!-- wp:visual-portfolio/item-title {"textAlign":"center"} /-->
+		<!-- wp:visual-portfolio/item-title {"style":{"typography":{"textAlign":"center"}}} /-->
 	<!-- /wp:visual-portfolio/item-template -->
+	<!-- wp:visual-portfolio/loop-no-results -->
+		<!-- wp:paragraph -->
+		<p><?php esc_html_e( 'No items were found matching your selection.', 'visual-portfolio' ); ?></p>
+		<!-- /wp:paragraph -->
+	<!-- /wp:visual-portfolio/loop-no-results -->
 </div>
 <!-- /wp:visual-portfolio/loop -->

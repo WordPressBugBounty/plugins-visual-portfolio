@@ -1,3 +1,5 @@
+import apiFetch from '@wordpress/api-fetch';
+import { store as blockEditorStore } from '@wordpress/block-editor';
 import {
 	Button,
 	FormTokenField,
@@ -7,10 +9,12 @@ import {
 	TextControl,
 } from '@wordpress/components';
 import { store as coreStore } from '@wordpress/core-data';
-import { useSelect } from '@wordpress/data';
+import { useDispatch, useSelect } from '@wordpress/data';
 import { useState } from '@wordpress/element';
+import { applyFilters } from '@wordpress/hooks';
 import { __, sprintf } from '@wordpress/i18n';
 import { chevronLeft, chevronRight } from '@wordpress/icons';
+import { store as noticesStore } from '@wordpress/notices';
 
 import FocalPointControl from '../../components/focal-point-control';
 import CollapsibleSection from '../../components/gallery-control/collapsible-section';
@@ -20,7 +24,8 @@ import LoopImageSettingsSlot, {
 } from '../../components/loop-image-settings-slot';
 import MediaPreviewCard from '../../components/media-preview-card';
 import { ToggleGroupButtonsControl } from '../../components/toggle-group-control';
-import { prepareImage } from './prepare-images';
+import { getImageKey, prepareImage } from './prepare-images';
+import PreviewMedia from './preview-media';
 
 const { admin_url: adminUrl } = window.VPGutenbergVariables;
 
@@ -28,6 +33,19 @@ const FORMAT_OPTIONS = [
 	{ value: 'standard', label: __('Standard', 'visual-portfolio') },
 	{ value: 'video', label: __('Video', 'visual-portfolio') },
 ];
+
+/**
+ * The formats an image can be given.
+ *
+ * Pro adds its formats through this filter, and the fields of a format through
+ * the `VP.LoopImageSettings` slot. A saved format the list lacks stays on the
+ * image until another one is picked.
+ *
+ * @return {Array} select options.
+ */
+function getFormatOptions() {
+	return applyFilters('vpf.loopImageFormats', FORMAT_OPTIONS);
+}
 
 const STATE_OPTIONS = [
 	{ value: 'default', label: __('Default', 'visual-portfolio') },
@@ -124,6 +142,92 @@ function AdditionalMediaInfo({ imageId }) {
 				</li>
 			</ul>
 		</CollapsibleSection>
+	);
+}
+
+/**
+ * Moves an image inserted from a URL into the Media Library.
+ *
+ * What only an attachment has, the sizes and srcset, the crop and the settings
+ * Pro reads off the attachment, comes with it. The server fetches the file, the
+ * way the core Image block's Upload to Media Library does, so the host of the
+ * image does not have to allow the editor to read it.
+ *
+ * @param {Object}   props          - component props.
+ * @param {Object}   props.image    - image being edited.
+ * @param {Function} props.onChange - merges the given values into the image.
+ * @return {Element|null} component.
+ */
+function UploadToLibrary({ image, onChange }) {
+	const [isUploading, setIsUploading] = useState(false);
+	const { createErrorNotice, createSuccessNotice } =
+		useDispatch(noticesStore);
+
+	// The editor hands the block editor its upload handler only for a user
+	// who may upload.
+	const canUpload = useSelect(
+		(select) => !!select(blockEditorStore).getSettings().mediaUpload,
+		[]
+	);
+
+	if (!canUpload) {
+		return null;
+	}
+
+	const upload = () => {
+		setIsUploading(true);
+
+		apiFetch({
+			path: '/wp/v2/media',
+			method: 'POST',
+			data: { url: image.imgUrl },
+		})
+			.then((attachment) => {
+				const { id, imgUrl, imgThumbnailUrl } = prepareImage({
+					...attachment,
+					url: attachment.source_url,
+				});
+
+				// Everything typed into the image stays; the size is the
+				// attachment's to answer now.
+				onChange({
+					id,
+					imgUrl,
+					imgThumbnailUrl,
+					width: undefined,
+					height: undefined,
+				});
+				createSuccessNotice(
+					__(
+						'Image uploaded to the Media Library.',
+						'visual-portfolio'
+					),
+					{ type: 'snackbar' }
+				);
+			})
+			.catch((error) => {
+				createErrorNotice(
+					error?.message ||
+						__(
+							'The image could not be uploaded.',
+							'visual-portfolio'
+						),
+					{ type: 'snackbar' }
+				);
+			})
+			.finally(() => setIsUploading(false));
+	};
+
+	return (
+		<Button
+			variant="secondary"
+			isBusy={isUploading}
+			disabled={isUploading}
+			accessibleWhenDisabled
+			onClick={upload}
+		>
+			{__('Upload to Media Library', 'visual-portfolio')}
+		</Button>
 	);
 }
 
@@ -235,18 +339,24 @@ export default function ImageSettingsModal({
 							{previewUrl ? (
 								<MediaPreviewCard
 									onSelect={(media) =>
-										onChange(prepareImage(media))
+										// The size of an image from elsewhere
+										// does not describe the new one.
+										onChange({
+											width: undefined,
+											height: undefined,
+											...prepareImage(media),
+										})
 									}
 									allowedTypes={allowedTypes}
 									onRemove={onRemove}
 								>
-									<img src={previewUrl} alt="" />
+									<PreviewMedia url={previewUrl} />
 								</MediaPreviewCard>
 							) : null}
 
 							{/* Remounted per image, so it opens only for an off-centre point. */}
 							<FocalPointControl
-								key={image.id}
+								key={getImageKey(image)}
 								value={image.focalPoint}
 								onChange={(focalPoint) =>
 									onChange({ focalPoint })
@@ -255,7 +365,12 @@ export default function ImageSettingsModal({
 
 							{image.id ? (
 								<AdditionalMediaInfo imageId={image.id} />
-							) : null}
+							) : (
+								<UploadToLibrary
+									image={image}
+									onChange={onChange}
+								/>
+							)}
 						</>
 					)}
 				</div>
@@ -266,6 +381,17 @@ export default function ImageSettingsModal({
 						label={__('Title', 'visual-portfolio')}
 						value={image.title || ''}
 						onChange={(title) => onChange({ title })}
+					/>
+
+					<TextControl
+						className="vpf-gallery-manager-modal__field-full"
+						label={__('Alt text', 'visual-portfolio')}
+						help={__(
+							'Describes the picture to someone who cannot see it. Left empty, the alt text from the media library is used.',
+							'visual-portfolio'
+						)}
+						value={image.alt || ''}
+						onChange={(alt) => onChange({ alt })}
 					/>
 
 					<TextareaControl
@@ -293,7 +419,7 @@ export default function ImageSettingsModal({
 					<SelectControl
 						label={__('Format', 'visual-portfolio')}
 						value={image.format || 'standard'}
-						options={FORMAT_OPTIONS}
+						options={getFormatOptions()}
 						onChange={(format) => onChange({ format })}
 					/>
 
@@ -326,13 +452,18 @@ export default function ImageSettingsModal({
 						onChange={(author) => onChange({ author })}
 					/>
 
-					<TextControl
-						type="url"
-						label={__('Author URL', 'visual-portfolio')}
-						placeholder="https://"
-						value={image.author_url || ''}
-						onChange={(value) => onChange({ author_url: value })}
-					/>
+					{/* Without a name there is nothing to link, so the gallery ignores the URL. */}
+					{image.author ? (
+						<TextControl
+							type="url"
+							label={__('Author URL', 'visual-portfolio')}
+							placeholder="https://"
+							value={image.author_url || ''}
+							onChange={(value) =>
+								onChange({ author_url: value })
+							}
+						/>
+					) : null}
 
 					<LoopImageSettingsSlot {...fillProps} />
 				</div>

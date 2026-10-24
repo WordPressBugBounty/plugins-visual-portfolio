@@ -157,6 +157,31 @@ class Visual_Portfolio_Security {
 	}
 
 	/**
+	 * Escape an item image with the `vp_image` rules.
+	 *
+	 * A lazy image comes with a `<noscript>` fallback. Since WordPress 7.2
+	 * `wp_kses()` stops at a `<noscript>` and drops everything from it on, so
+	 * the fallback is escaped on its own and the wrapper is added here.
+	 *
+	 * @param string $html - image HTML.
+	 *
+	 * @return string
+	 */
+	public static function kses_image( $html ) {
+		$parts  = preg_split( '#<noscript>(.*?)</noscript>#is', (string) $html, -1, PREG_SPLIT_DELIM_CAPTURE );
+		$output = '';
+
+		foreach ( $parts as $i => $part ) {
+			$part = wp_kses( $part, 'vp_image' );
+
+			// Odd parts are the contents of a `<noscript>`.
+			$output .= $i % 2 ? '<noscript>' . $part . '</noscript>' : $part;
+		}
+
+		return $output;
+	}
+
+	/**
 	 * Sanitize hidden attribute.
 	 *
 	 * @param string|bool $attribute - Unclear Hidden Attribute.
@@ -180,6 +205,55 @@ class Visual_Portfolio_Security {
 		}
 
 		return $value;
+	}
+
+	/**
+	 * Whether the current user edits content of any kind.
+	 *
+	 * The editor endpoints answer with data the editor needs to build a block,
+	 * so editing anything is enough - a user without the blanket `edit_posts` may
+	 * still edit a custom post type the block is used in.
+	 *
+	 * @return bool
+	 */
+	public static function current_user_can_edit_content() {
+		if ( current_user_can( 'edit_posts' ) ) {
+			return true;
+		}
+
+		foreach ( get_post_types( array( 'show_in_rest' => true ), 'objects' ) as $post_type ) {
+			if ( current_user_can( $post_type->cap->edit_posts ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Make CSS safe to print inside a `<style>` element.
+	 *
+	 * `wp_kses()` treats CSS as HTML text and encodes `&` and `>`, which breaks
+	 * nesting and child selectors. CSS only needs to be kept from closing the
+	 * element it is printed in.
+	 *
+	 * @param string $css - CSS code.
+	 *
+	 * @return string
+	 */
+	public static function sanitize_css( $css ) {
+		// Drop HTML tags such as a <style> wrapper but keep their text, so CSS pasted with tags still applies.
+		$stripped = preg_replace( '#</?[a-zA-Z](?:[^<>"\']|"[^"]*"|\'[^\']*\')*>#', '', (string) $css );
+		if ( null !== $stripped ) {
+			$css = $stripped;
+		}
+		// No end tag or comment can open: `</` becomes the CSS escape `\3c /`, `<!--` a space, and ESC bytes
+		// (ISO-2022-JP shift sequences that hide `</style` from byte matching) are dropped.
+		return (string) preg_replace(
+			array( '#<!--#', '#<(?=/)#' ),
+			array( ' ', '\\\\3c ' ),
+			str_replace( "\x1b", '', (string) $css )
+		);
 	}
 
 	/**
@@ -458,6 +532,8 @@ class Visual_Portfolio_Security {
 							case 'id':
 							case 'custom_popup_image':
 							case 'hover_image':
+							case 'width':
+							case 'height':
 								$attribute[ $key ][ $attribute_key ] = self::sanitize_number( $media_attribute );
 								break;
 							case 'categories':
@@ -642,16 +718,20 @@ class Visual_Portfolio_Security {
 		 * A source or a module that gives the loop a setting the legacy
 		 * gallery has no control for registers it here, or `get_options()`
 		 * drops it before the query is built. The value is the type its
-		 * sanitizer takes: `ids`, `text`, `boolean` or `number`.
+		 * sanitizer takes: `ids`, `slugs`, `text`, `boolean` or `number`.
 		 *
 		 * @param array $options Option name to sanitizer type.
 		 */
 		return apply_filters(
 			'vpf_loop_only_options',
 			array(
-				'posts_keyword'         => 'text',
-				'posts_exclude_current' => 'boolean',
-				'max_pages'             => 'number',
+				'posts_keyword'             => 'text',
+				'posts_exclude_current'     => 'boolean',
+				'posts_sticky'              => 'text',
+				'posts_authors'             => 'ids',
+				'posts_formats'             => 'slugs',
+				'posts_excluded_taxonomies' => 'ids',
+				'max_pages'                 => 'number',
 			)
 		);
 	}
@@ -668,6 +748,8 @@ class Visual_Portfolio_Security {
 		switch ( $type ) {
 			case 'ids':
 				return array_values( array_filter( array_map( 'absint', (array) $value ) ) );
+			case 'slugs':
+				return array_values( array_filter( array_map( 'sanitize_key', (array) $value ) ) );
 			case 'text':
 				return is_scalar( $value ) ? sanitize_text_field( wp_unslash( (string) $value ) ) : '';
 			case 'boolean':
@@ -709,6 +791,10 @@ class Visual_Portfolio_Security {
 			'posts_custom_query'          => array( 'string', '' ),
 			'posts_exclude_current'       => array( 'boolean', false ),
 			'posts_keyword'               => array( 'string', '' ),
+			'posts_sticky'                => array( 'string', '' ),
+			'posts_authors'               => array( 'array', array() ),
+			'posts_formats'               => array( 'array', array() ),
+			'posts_excluded_taxonomies'   => array( 'array', array() ),
 			'posts_excluded_ids'          => array( 'array', array() ),
 			'posts_ids'                   => array( 'array', array() ),
 			'posts_offset'                => 'number',

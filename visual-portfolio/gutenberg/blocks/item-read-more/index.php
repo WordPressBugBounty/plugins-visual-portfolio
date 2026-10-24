@@ -75,7 +75,7 @@ class Visual_Portfolio_Block_Item_Read_More {
 	 * @return string Empty when the click action has nothing to reach.
 	 */
 	private function get_click_wrapper( $label, $attributes, $context ) {
-		$action = $attributes['clickAction'] ?? 'url';
+		list( $action, $extension ) = Visual_Portfolio_Popup::resolve_click_action( $attributes['clickAction'] ?? 'url', $context );
 
 		if ( 'none' === $action ) {
 			return '<span>' . $label . '</span>';
@@ -83,20 +83,16 @@ class Visual_Portfolio_Block_Item_Read_More {
 
 		$label .= self::get_screen_reader_name( $context );
 
+		if ( $extension ) {
+			return sprintf( '<a%1$s>%2$s</a>', Visual_Portfolio_Popup::get_attributes_html( $extension ), $label );
+		}
+
 		if ( 'popup' === $action ) {
 			$trigger = Visual_Portfolio_Popup::get_trigger_attributes( $context );
 
-			// An item the lightbox has nothing to show - a Pro source that
-			// refused it, an image that no longer exists - leaves nothing to
-			// read more of.
-			if ( empty( $trigger ) ) {
-				return '';
-			}
-
 			return sprintf(
-				'<a href="%1$s" data-vp-popup="%2$s">%3$s</a>',
+				'<a href="%1$s" data-vp-popup>%2$s</a>',
 				esc_url( $trigger['href'] ),
-				esc_attr( $trigger['data-vp-popup'] ),
 				$label
 			);
 		}
